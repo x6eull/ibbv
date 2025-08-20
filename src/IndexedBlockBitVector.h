@@ -65,8 +65,8 @@ static inline size_t szudzik(size_t a, size_t b) {
   const auto advance_this = 16 - SIMD::bit::lzcnt(lemask_this),                \
              advance_rhs = 16 - SIMD::bit::lzcnt(lemask_rhs);
 
-namespace iibv {
-using namespace iibv::utils;
+namespace ibbv {
+using namespace ibbv::utils;
 template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
   static_assert(BlockSize == 128,
                 "BlockSize other than 128 is unsupported currently");
@@ -154,29 +154,29 @@ public:
     }
 
     bool contains(const Block &rhs) const noexcept {
-      return iibv::utils::contains<BlockSize>(data, rhs.data);
+      return ibbv::utils::contains<BlockSize>(data, rhs.data);
     }
 
     bool intersects(const Block &rhs) const noexcept {
-      return iibv::utils::intersects<BlockSize>(data, rhs.data);
+      return ibbv::utils::intersects<BlockSize>(data, rhs.data);
     }
 
     bool operator==(const Block &rhs) const noexcept {
-      return iibv::utils::cmpeq<BlockSize>(data, rhs.data);
+      return ibbv::utils::cmpeq<BlockSize>(data, rhs.data);
     }
 
     bool operator!=(const Block &rhs) const noexcept { return !(*this == rhs); }
 
     bool operator|=(const Block &rhs) noexcept {
-      return iibv::utils::or_inplace<BlockSize>(data, rhs.data);
+      return ibbv::utils::or_inplace<BlockSize>(data, rhs.data);
     }
 
-    iibv::utils::ComposedChangeResult operator&=(const Block &rhs) noexcept {
-      return iibv::utils::and_inplace<BlockSize>(data, rhs.data);
+    ibbv::utils::ComposedChangeResult operator&=(const Block &rhs) noexcept {
+      return ibbv::utils::and_inplace<BlockSize>(data, rhs.data);
     }
 
-    iibv::utils::ComposedChangeResult operator-=(const Block &rhs) noexcept {
-      return iibv::utils::diff_inplace<BlockSize>(data, rhs.data);
+    ibbv::utils::ComposedChangeResult operator-=(const Block &rhs) noexcept {
+      return ibbv::utils::diff_inplace<BlockSize>(data, rhs.data);
     }
   };
   static_assert(sizeof(Block) * 8 == BlockSize);
@@ -933,4 +933,4 @@ public:
     return szudzik(count(), szudzik(size(), size() > 0 ? *begin() : -1));
   }
 };
-} // namespace iibv
+} // namespace ibbv

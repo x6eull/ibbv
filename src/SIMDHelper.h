@@ -10,7 +10,7 @@ template <typename> struct dependent_false : std::false_type {};
   static_assert(dependent_false<T>::value, message);                           \
   __builtin_unreachable();
 
-namespace iibv::utils {
+namespace ibbv::utils {
 _inline static uint16_t rol16(const uint16_t x, const int n) {
   return (x << n) | (x >> (16 - n));
 }
@@ -290,4 +290,4 @@ _inline ComposedChangeResult diff_inplace(void *addr1, const void *addr2) {
     return ComposedChangeResult::not_zero(
         !avx_vec<BitWidth>::eq_cmp(v1, andnot_result));
 }
-} // namespace iibv::utils
+} // namespace ibbv::utils
