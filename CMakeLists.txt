@@ -18,3 +18,4 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 add_executable(ibbv_test src/test.cpp)
 target_link_libraries(ibbv_test benchmark::benchmark)
+target_compile_options(ibbv_test PUBLIC -march=native)
