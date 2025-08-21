@@ -121,7 +121,7 @@ public:
   size_type count() const {
     unsigned NumBits = 0;
     for (unsigned i = 0; i < BITWORDS_PER_ELEMENT; ++i)
-      NumBits += ibbv::utils::SIMD::bit::popcnt(Bits[i]);
+      NumBits += ibbv::utils::popcnt(Bits[i]);
     return NumBits;
   }
 
@@ -129,7 +129,7 @@ public:
   int find_first() const {
     for (unsigned i = 0; i < BITWORDS_PER_ELEMENT; ++i)
       if (Bits[i] != 0)
-        return i * BITWORD_SIZE + ibbv::utils::SIMD::bit::tzcnt(Bits[i]);
+        return i * BITWORD_SIZE + ibbv::utils::tzcnt(Bits[i]);
     llvm_unreachable("Illegal empty element");
   }
 
@@ -139,7 +139,7 @@ public:
       unsigned Idx = BITWORDS_PER_ELEMENT - I - 1;
       if (Bits[Idx] != 0)
         return Idx * BITWORD_SIZE + BITWORD_SIZE -
-               ibbv::utils::SIMD::bit::lzcnt(Bits[Idx]) - 1;
+               ibbv::utils::lzcnt(Bits[Idx]) - 1;
     }
     llvm_unreachable("Illegal empty element");
   }
@@ -160,12 +160,12 @@ public:
     Copy &= ~0UL << BitPos;
 
     if (Copy != 0)
-      return WordPos * BITWORD_SIZE + ibbv::utils::SIMD::bit::tzcnt(Copy);
+      return WordPos * BITWORD_SIZE + ibbv::utils::tzcnt(Copy);
 
     // Check subsequent words.
     for (unsigned i = WordPos + 1; i < BITWORDS_PER_ELEMENT; ++i)
       if (Bits[i] != 0)
-        return i * BITWORD_SIZE + ibbv::utils::SIMD::bit::tzcnt(Bits[i]);
+        return i * BITWORD_SIZE + ibbv::utils::tzcnt(Bits[i]);
     return -1;
   }
 

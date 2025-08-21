@@ -184,7 +184,6 @@ template <unsigned short BitWidth> _inline bool testz(const void *addr) {
   return avx_vec<BitWidth>::is_zero(v);
 }
 
-namespace SIMD::bit {
 #define UNSUPPORTED_TYPE STATIC_ASSERT_FAIL("Unsupported type");
 // the following functions return `int` as well as header <bit>
 // TODO: use bit manipulation functions from std (C++20)
@@ -200,6 +199,9 @@ template <typename T> _inline int lzcnt(T value) { UNSUPPORTED_TYPE }
 template <> _inline int lzcnt<uint16_t>(uint16_t value) {
   return _lzcnt_u32(value) - 16;
 }
+template <> _inline int lzcnt<uint64_t>(uint64_t value) {
+  return _lzcnt_u64(value);
+}
 
 template <typename T> _inline int tzcnt(T value) { UNSUPPORTED_TYPE }
 template <> _inline int tzcnt<uint16_t>(uint16_t value) {
@@ -208,7 +210,6 @@ template <> _inline int tzcnt<uint16_t>(uint16_t value) {
 template <> _inline int tzcnt<uint64_t>(uint64_t value) {
   return _tzcnt_u64(value);
 }
-} // namespace SIMD::bit
 
 /// Returns true if all bits in v2 are set in v1. (that is, v1 contains v2)
 template <unsigned short BitWidth>

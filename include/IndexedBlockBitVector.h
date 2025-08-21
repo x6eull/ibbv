@@ -62,8 +62,8 @@ static inline size_t szudzik(size_t a, size_t b) {
                  lemask_rhs =                                                  \
                      _mm512_cmple_epu32_mask(v_rhs_idx, rangemax_this);        \
   /**the number to increase for this_i / rhs_i, <= 16 */                       \
-  const auto advance_this = 16 - SIMD::bit::lzcnt(lemask_this),                \
-             advance_rhs = 16 - SIMD::bit::lzcnt(lemask_rhs);
+  const auto advance_this = 16 - ibbv::utils::lzcnt(lemask_this),              \
+             advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
 
 namespace ibbv {
 using namespace ibbv::utils;
@@ -181,7 +181,7 @@ public:
   };
   static_assert(sizeof(Block) * 8 == BlockSize);
 
-  using index_t = uint32_t;
+  using index_t = int32_t;
 
 protected:
   using index_container =
@@ -251,7 +251,7 @@ public:
       while (!end) {
         auto mask = ~((static_cast<UnitType>(1) << bit_index) - 1);
         auto masked_unit = blockIt->data[unit_index] & mask;
-        auto tz_count = SIMD::bit::tzcnt(masked_unit);
+        auto tz_count = ibbv::utils::tzcnt(masked_unit);
         if (tz_count < UnitBits) {
           // found a set bit
           bit_index = tz_count;
@@ -312,11 +312,33 @@ public:
   /// Returns an iterator to the beginning of this vector.
   /// NOTE: If you modify the vector after creating an iterator, the iterator
   /// is not stable and may cause UB if used.
-  const IndexedBlockBitVectorIterator begin() const {
+  IndexedBlockBitVectorIterator begin() const {
     return IndexedBlockBitVectorIterator(*this);
   }
-  const IndexedBlockBitVectorIterator end() const {
+  IndexedBlockBitVectorIterator end() const {
     return IndexedBlockBitVectorIterator(*this, true);
+  }
+
+  /// Return the first set bit in the bitmap.  Return -1 if no bits are set.
+  index_t find_first() const {
+    if (empty())
+      return -1;
+    return *begin();
+  }
+
+  /// Return the last set bit in the bitmap.  Return -1 if no bits are set.
+  index_t find_last() const {
+    if (empty())
+      return -1;
+    const auto &last_blk = blocks.back();
+    index_t last_index = indexes.back() + BlockSize - 1;
+    for (auto i = UnitsPerBlock - 1; i >= 0; i--) {
+      const auto cnt = ibbv::utils::lzcnt(last_blk.data[i]);
+      last_index -= cnt;
+      if (cnt < UnitBits)
+        return last_index;
+    }
+    __builtin_unreachable(); // all bits are zero ?
   }
 
   /// Construct empty vector
@@ -358,9 +380,9 @@ public:
     return avx_vec<BlockSize>::reduce_add(c);
 #else
     uint32_t result = 0;
-    auto arr = reinterpret_cast<const uint32_t *>(this->data.data());
+    auto arr = reinterpret_cast<const uint32_t *>(this->blocks.data());
     for (size_t i = 0; i < size() * (sizeof(Block) / 8); ++i, ++arr)
-      result += SIMD::bit::popcnt(*arr);
+      result += ibbv::utils::popcnt(*arr);
     return result;
 #endif
   }
@@ -372,7 +394,7 @@ public:
   }
 
   /// Returns true if n is in this set.
-  bool test(uint32_t n) const noexcept {
+  bool test(index_t n) const noexcept {
     const auto target_ind = n - (n % BlockSize);
     const auto low_pos =
         std::lower_bound(indexes.begin(), indexes.end(), target_ind);
@@ -383,7 +405,7 @@ public:
       return block_at(i).test(n % BlockSize);
   }
 
-  void set(uint32_t n) noexcept {
+  void set(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
     const auto low_pos =
         std::lower_bound(indexes.begin(), indexes.end(), target_ind);
@@ -396,7 +418,7 @@ public:
 
   /// Check if bit is set. If it is, returns false.
   /// Otherwise, sets bit and returns true.
-  bool test_and_set(uint32_t n) noexcept {
+  bool test_and_set(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
     const auto low_pos =
         std::lower_bound(indexes.begin(), indexes.end(), target_ind);
@@ -408,7 +430,7 @@ public:
       return block_at(i).test_and_set(n % BlockSize);
   }
 
-  void reset(uint32_t n) noexcept {
+  void reset(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
     const auto low_pos =
         std::lower_bound(indexes.begin(), indexes.end(), target_ind);
@@ -440,7 +462,7 @@ public:
       ADV_COUNT;
 
       /// count of matched indexes
-      const auto n_matched = SIMD::bit::popcnt((uint32_t)match_this);
+      const auto n_matched = ibbv::utils::popcnt((uint32_t)match_this);
 
       if (advance_rhs > n_matched)
         return false;
@@ -580,7 +602,7 @@ public:
         const auto &rhs_block_cur = rhs.block_at(rhs_i + i);
         if (match_rhs & (1 << i)) { // check bits[i]
           // copy current rhs block into right pos
-          const auto this_pad = SIMD::bit::tzcnt(match_this_temp);
+          const auto this_pad = ibbv::utils::tzcnt(match_this_temp);
           store_blk_base += this_pad;
           *store_blk_base = rhs_block_cur;
           ++store_blk_base;
@@ -828,8 +850,8 @@ public:
       auto rhs_block_temp_addr = rhs_block_temp,
            rhs_block_addr = &rhs.block_at(rhs_i);
       while (matched_this_temp) {
-        const auto this_pad = SIMD::bit::tzcnt(matched_this_temp),
-                   rhs_pad = SIMD::bit::tzcnt(matched_rhs_temp);
+        const auto this_pad = ibbv::utils::tzcnt(matched_this_temp),
+                   rhs_pad = ibbv::utils::tzcnt(matched_rhs_temp);
         rhs_block_temp_addr += this_pad, rhs_block_addr += rhs_pad;
         *rhs_block_temp_addr = *rhs_block_addr;
         matched_this_temp >>= this_pad + 1, matched_rhs_temp >>= rhs_pad + 1;
