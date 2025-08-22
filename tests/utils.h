@@ -1,25 +1,28 @@
+#pragma once
+
 #include "IndexedBlockBitVector.h"
 #include "SparseBitVector.h"
 #include <benchmark/benchmark.h>
 #include <cstdint>
+#include <initializer_list>
 #include <random>
 #include <unordered_set>
 
 namespace ibbv::test {
-using ele_idx = uint32_t;
+using ele_idx = int32_t;
 using common_rep = std::unordered_set<ele_idx>;
 using IBBV = ibbv::IndexedBlockBitVector<>;
 using SBV = llvm::SparseBitVector<>;
 
 static std::random_device rd;
-static const auto dev_seed = rd();
+static const auto global_seed = rd();
 static inline common_rep stable_random_dist(ele_idx n, ele_idx max) {
   constexpr ele_idx min = 0;
-  if (n <= 0 || min > max || max - min + 1 < n)
-    throw std::invalid_argument("Invalid parameters");
+  if (n <= 0)
+    return common_rep{};
 
   static common_rep unique_numbers;
-  std::mt19937 gen(dev_seed ^ n ^ min ^ max);
+  std::mt19937 gen(global_seed ^ n ^ min ^ max);
   std::uniform_int_distribution<ele_idx> dis(min, max);
 
   unique_numbers.reserve(n);
@@ -46,5 +49,17 @@ template <typename T> common_rep to_common(const T &bv) {
   for (const auto i : bv)
     rep.emplace(i);
   return rep;
+}
+
+template <typename V>
+std::vector<V> concat_vec(std::initializer_list<std::vector<V>> lists) {
+  std::vector<V> result;
+  size_t total_size = 0;
+  for (const auto &lst : lists)
+    total_size += lst.size();
+  result.reserve(total_size);
+  for (const auto &lst : lists)
+    result.insert(result.end(), lst.begin(), lst.end());
+  return result;
 }
 } // namespace ibbv::test
