@@ -479,7 +479,6 @@ public:
         const auto v_rhs = _mm512_maskz_loadu_epi64(dup_match_this >> (i * 8),
                                                     &rhs_block_temp[i * 4]);
         const auto or_result = _mm512_or_epi64(v_this, v_rhs);
-        _mm512_extracti64x2_epi64(v_this, i);
 
         if (!changed) // compute `changed` if not already set
           changed = !avx_vec<512>::eq_cmp(v_this, or_result);
