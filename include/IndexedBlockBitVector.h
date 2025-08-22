@@ -429,140 +429,7 @@ public:
       erase_at(i); // this block is empty, remove it
   }
 
-  /// Returns true if this set contains all bits of rhs.
-  bool contains_simd(const IndexedBlockBitVector &rhs) const noexcept {
-    const auto this_size = size(), rhs_size = rhs.size();
-    if (this_size < rhs_size)
-      return false;
-
-    size_t this_i = 0, rhs_i = 0;
-    const auto all_zero = _mm512_setzero_si512();
-    while (this_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
-      /// indexes[this_i..this_i + 16]
-      const auto v_this_idx = _mm512_loadu_epi32(indexes.data() + this_i),
-                 v_rhs_idx = _mm512_loadu_epi32(rhs.indexes.data() + rhs_i);
-      /// whether each u32 matches (exist in both vectors)
-      uint16_t match_this, match_rhs;
-      ne_mm512_2intersect_epi32(v_this_idx, v_rhs_idx, match_this, match_rhs);
-
-      ADV_COUNT;
-
-      /// count of matched indexes
-      const auto n_matched = ibbv::utils::popcnt((uint32_t)match_this);
-
-      if (advance_rhs > n_matched)
-        return false;
-
-      /// compress the intersected data's offset(/8bytes).
-      const auto gather_this_offset_u16x32 =
-                     _mm512_maskz_compress_epi32(match_this, asc_indexes),
-                 gather_rhs_offset_u16x32 =
-                     _mm512_maskz_compress_epi32(match_rhs, asc_indexes);
-      const auto gather_this_base_addr = block_at(this_i).data;
-      const auto gather_rhs_base_addr = rhs.block_at(rhs_i).data;
-
-      const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
-
-      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
-        const auto cur_gather_this_offset_u16x8 =
-            _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
-        const auto cur_gather_rhs_offset_u16x8 =
-            _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
-
-        const auto cur_gather_this_offset_u64x8 =
-            _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
-        const auto cur_gather_rhs_offset_u64x8 =
-            _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
-
-        const auto intersect_this = _mm512_mask_i64gather_epi64(
-            all_zero, n_matched_bits_dup >> i * 8, cur_gather_this_offset_u64x8,
-            gather_this_base_addr, 8);
-        const auto intersect_rhs = _mm512_mask_i64gather_epi64(
-            all_zero, n_matched_bits_dup >> i * 8, cur_gather_rhs_offset_u64x8,
-            gather_rhs_base_addr, 8);
-
-        const auto and_result = _mm512_and_epi64(intersect_this, intersect_rhs);
-
-        if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs))
-          return false;
-      });
-      this_i += advance_this, rhs_i += advance_rhs;
-    }
-    while (this_i < size() && rhs_i < rhs.size()) {
-      const auto this_ind = index_at(this_i);
-      const auto rhs_ind = rhs.index_at(rhs_i);
-      if (this_ind > rhs_ind)
-        return false;
-      if (this_ind < rhs_ind)
-        ++this_i;
-      else {
-        if (!block_at(this_i).contains(rhs.block_at(rhs_i)))
-          return false;
-        ++this_i, ++rhs_i;
-      }
-    }
-    return rhs_i == rhs.size();
-  }
-
-  bool contains_loop(const IndexedBlockBitVector &rhs) const noexcept {
-    size_t this_i = 0, rhs_i = 0;
-    while (this_i < size() && rhs_i < rhs.size()) {
-      const auto this_ind = index_at(this_i);
-      const auto rhs_ind = rhs.index_at(rhs_i);
-      if (this_ind > rhs_ind)
-        return false;
-      if (this_ind < rhs_ind)
-        ++this_i;
-      else {
-        if (!block_at(this_i).contains(rhs.block_at(rhs_i)))
-          return false;
-        ++this_i, ++rhs_i;
-      }
-    }
-    return rhs_i == rhs.size();
-  }
-
-  bool contains(const IndexedBlockBitVector &rhs) const noexcept {
-    return contains_simd(rhs);
-    // auto simd_result = contains_simd(rhs), loop_result =
-    // contains_loop(rhs); assert(simd_result == loop_result); return
-    // simd_result;
-  }
-
-  // TODO: use SIMD to improve perf
-  /// Returns true if this set and rhs share any bits.
-  bool intersects(const IndexedBlockBitVector &rhs) const noexcept {
-    size_t this_i = 0, rhs_i = 0;
-    while (this_i < size() && rhs_i < rhs.size()) {
-      const auto this_ind = index_at(this_i);
-      const auto rhs_ind = rhs.index_at(rhs_i);
-      if (this_ind > rhs_ind)
-        ++rhs_i;
-      else if (this_ind < rhs_ind)
-        ++this_i;
-      else {
-        if (this->block_at(this_i).intersects(rhs.block_at(rhs_i)))
-          return true;
-        ++this_i, ++rhs_i;
-      }
-    }
-    return false;
-  }
-
-  bool operator==(const IndexedBlockBitVector &rhs) const noexcept {
-    if (size() != rhs.size())
-      return false;
-    return std::memcmp(indexes.data(), rhs.indexes.data(),
-                       sizeof(index_t) * size()) == 0 &&
-           std::memcmp(blocks.data(), rhs.blocks.data(),
-                       sizeof(Block) * size()) == 0;
-  }
-
-  bool operator!=(const IndexedBlockBitVector &rhs) const noexcept {
-    return !(*this == rhs);
-  }
-
-  bool union_simd3(const IndexedBlockBitVector &rhs) {
+  bool union_simd(const IndexedBlockBitVector &rhs) {
     // Update `this` inplace, save extra blocks to temp
     const auto this_size = size(), rhs_size = rhs.size();
     size_t this_i = 0, rhs_i = 0;
@@ -682,16 +549,6 @@ public:
     return changed;
   }
 
-  /// Inplace union with rhs.
-  /// Returns true if this set changed.
-  bool operator|=(const IndexedBlockBitVector &rhs) { return union_simd3(rhs); }
-
-  IndexedBlockBitVector operator|(const IndexedBlockBitVector &rhs) const {
-    IndexedBlockBitVector copy(*this);
-    copy |= rhs;
-    return copy;
-  }
-
   /// Inplace intersection with rhs.
   /// Returns true if this set changed.
   /// Optimized using AVX512 intrinsics, requires AVX512F inst set.
@@ -808,11 +665,6 @@ public:
     changed |= (valid_count != this_size);
     return changed;
   }
-  /// Inplace intersection with rhs.
-  /// Returns true if this set changed.
-  bool operator&=(const IndexedBlockBitVector &rhs) {
-    return intersect_simd(rhs);
-  }
 
   /// Inplace difference with rhs.
   /// Returns true if this set changed.
@@ -927,6 +779,115 @@ public:
     changed |= (valid_count != this_size);
     return changed;
   }
+
+  /// Returns true if this set contains all bits of rhs.
+  bool contains_simd(const IndexedBlockBitVector &rhs) const noexcept {
+    const auto this_size = size(), rhs_size = rhs.size();
+    if (this_size < rhs_size)
+      return false;
+
+    size_t this_i = 0, rhs_i = 0;
+    const auto all_zero = _mm512_setzero_si512();
+    while (this_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
+      /// indexes[this_i..this_i + 16]
+      const auto v_this_idx = _mm512_loadu_epi32(indexes.data() + this_i),
+                 v_rhs_idx = _mm512_loadu_epi32(rhs.indexes.data() + rhs_i);
+      /// whether each u32 matches (exist in both vectors)
+      uint16_t match_this, match_rhs;
+      ne_mm512_2intersect_epi32(v_this_idx, v_rhs_idx, match_this, match_rhs);
+
+      ADV_COUNT;
+
+      /// count of matched indexes
+      const auto n_matched = ibbv::utils::popcnt((uint32_t)match_this);
+
+      if (advance_rhs > n_matched)
+        return false;
+
+      /// compress the intersected data's offset(/8bytes).
+      const auto gather_this_offset_u16x32 =
+                     _mm512_maskz_compress_epi32(match_this, asc_indexes),
+                 gather_rhs_offset_u16x32 =
+                     _mm512_maskz_compress_epi32(match_rhs, asc_indexes);
+      const auto gather_this_base_addr = block_at(this_i).data;
+      const auto gather_rhs_base_addr = rhs.block_at(rhs_i).data;
+
+      const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
+
+      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
+        const auto cur_gather_this_offset_u16x8 =
+            _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
+        const auto cur_gather_rhs_offset_u16x8 =
+            _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
+
+        const auto cur_gather_this_offset_u64x8 =
+            _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
+        const auto cur_gather_rhs_offset_u64x8 =
+            _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
+
+        const auto intersect_this = _mm512_mask_i64gather_epi64(
+            all_zero, n_matched_bits_dup >> i * 8, cur_gather_this_offset_u64x8,
+            gather_this_base_addr, 8);
+        const auto intersect_rhs = _mm512_mask_i64gather_epi64(
+            all_zero, n_matched_bits_dup >> i * 8, cur_gather_rhs_offset_u64x8,
+            gather_rhs_base_addr, 8);
+
+        const auto and_result = _mm512_and_epi64(intersect_this, intersect_rhs);
+
+        if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs))
+          return false;
+      });
+      this_i += advance_this, rhs_i += advance_rhs;
+    }
+    while (this_i < size() && rhs_i < rhs.size()) {
+      const auto this_ind = index_at(this_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (this_ind > rhs_ind)
+        return false;
+      if (this_ind < rhs_ind)
+        ++this_i;
+      else {
+        if (!block_at(this_i).contains(rhs.block_at(rhs_i)))
+          return false;
+        ++this_i, ++rhs_i;
+      }
+    }
+    return rhs_i == rhs.size();
+  }
+
+  bool contains(const IndexedBlockBitVector &rhs) const noexcept {
+    return contains_simd(rhs);
+  }
+
+  bool operator==(const IndexedBlockBitVector &rhs) const noexcept {
+    if (size() != rhs.size())
+      return false;
+    return std::memcmp(indexes.data(), rhs.indexes.data(),
+                       sizeof(index_t) * size()) == 0 &&
+           std::memcmp(blocks.data(), rhs.blocks.data(),
+                       sizeof(Block) * size()) == 0;
+  }
+
+  bool operator!=(const IndexedBlockBitVector &rhs) const noexcept {
+    return !(*this == rhs);
+  }
+
+  /// Inplace union with rhs.
+  /// Returns true if this set changed.
+  bool operator|=(const IndexedBlockBitVector &rhs) { return union_simd(rhs); }
+
+  IndexedBlockBitVector operator|(const IndexedBlockBitVector &rhs) const {
+    IndexedBlockBitVector copy(*this);
+    copy |= rhs;
+    return copy;
+  }
+
+  /// Inplace intersection with rhs.
+  /// Returns true if this set changed.
+  bool operator&=(const IndexedBlockBitVector &rhs) {
+    return intersect_simd(rhs);
+  }
+
   bool operator-=(const IndexedBlockBitVector &rhs) { return diff_simd(rhs); }
   bool intersectWithComplement(const IndexedBlockBitVector &rhs) {
     return *this -= rhs;
