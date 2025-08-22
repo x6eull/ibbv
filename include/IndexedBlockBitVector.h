@@ -7,6 +7,8 @@
 #include <cstring>
 #include <iterator>
 #include <memory>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "SIMDHelper.h"
@@ -18,31 +20,10 @@
   T(T &&) = default;                                                           \
   T &operator=(T &&) = default;
 #define DEFAULT_COPY_MOVE(T) DEFAULT_COPY(T) DEFAULT_MOVE(T)
-#define DO_WHILE0(code)                                                        \
-  do {                                                                         \
-    code                                                                       \
-  } while (0);
-#define REPEAT_2(identifier, start_from, block)                                \
-  {                                                                            \
-    constexpr int identifier = start_from;                                     \
-    DO_WHILE0(block)                                                           \
-  }                                                                            \
-  {                                                                            \
-    constexpr int identifier = start_from + 1;                                 \
-    DO_WHILE0(block)                                                           \
-  }
-#define REPEAT_4(identifier, start_from, block)                                \
-  REPEAT_2(identifier, start_from, block)                                      \
-  REPEAT_2(identifier, (start_from) + 2, block)
-#define REPEAT_8(identifier, start_from, block)                                \
-  REPEAT_4(identifier, start_from, block)                                      \
-  REPEAT_4(identifier, (start_from) + 4, block)
-#define REPEAT_i_2(block) REPEAT_2(i, 0, block)
-#define REPEAT_i_4(block) REPEAT_4(i, 0, block)
 
 /// A 512-bit vector contains 32*16-bit integers in ascending order,
 /// that is, {0, 1, 2, ..., 31} (from e0 to e31).
-static const auto asc_indexes =
+static inline const auto asc_indexes =
     _mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
                      16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 
@@ -64,6 +45,11 @@ static inline size_t szudzik(size_t a, size_t b) {
   /**the number to increase for this_i / rhs_i, <= 16 */                       \
   const auto advance_this = 16 - ibbv::utils::lzcnt(lemask_this),              \
              advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
+
+template <size_t... indices, typename Func>
+void unroll_loop(std::index_sequence<indices...>, Func f) {
+  (f(std::integral_constant<size_t, indices>()), ...);
+}
 
 namespace ibbv {
 using namespace ibbv::utils;
@@ -477,7 +463,7 @@ public:
 
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
-      REPEAT_i_4({ // required for `i` to be const
+      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
         const auto cur_gather_this_offset_u16x8 =
             _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
         const auto cur_gather_rhs_offset_u16x8 =
@@ -618,13 +604,14 @@ public:
       auto dup_match_this = duplicate_bits(match_this);
 
       // compute OR result of matched blocks
-      REPEAT_i_4({
-        /// matched & ordered 4 blocks (8 u64) from memory. zero in
-        /// case of out of bounds
+      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
+        /// matched & ordered 4 blocks (8 u64) from memory.
+        /// zero in case of out of bounds
         const auto v_this = _mm512_loadu_epi64(&block_at(this_i + i * 4));
         const auto v_rhs = _mm512_maskz_loadu_epi64(dup_match_this >> (i * 8),
                                                     &rhs_block_temp[i * 4]);
         const auto or_result = _mm512_or_epi64(v_this, v_rhs);
+        _mm512_extracti64x2_epi64(v_this, i);
 
         if (!changed) // compute `changed` if not already set
           changed = !avx_vec<512>::eq_cmp(v_this, or_result);
@@ -738,7 +725,7 @@ public:
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
       // compute AND result of matched blocks
-      REPEAT_i_4({
+      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
         const auto cur_gather_this_offset_u16x8 =
             _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
         const auto cur_gather_rhs_offset_u16x8 =
@@ -864,7 +851,7 @@ public:
       const auto dup_advance_this = duplicate_bits(advance_this_to_bits);
 
       // compute AND result of matched blocks
-      REPEAT_i_4({
+      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
         /// matched & ordered 4 blocks (8 u64) from memory. zero
         /// in case of out of bounds
         const auto v_this = _mm512_maskz_loadu_epi64(
