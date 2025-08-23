@@ -11,8 +11,10 @@
 namespace ibbv::test {
 using ele_idx = int32_t;
 using common_rep = std::unordered_set<ele_idx>;
-using IBBV = ibbv::IndexedBlockBitVector<>;
-using SBV = llvm::SparseBitVector<>;
+/// block size in bits
+constexpr inline unsigned short BlockSize = 128;
+using IBBV = ibbv::IndexedBlockBitVector<BlockSize>;
+using SBV = llvm::SparseBitVector<BlockSize>;
 
 static std::random_device rd;
 static const auto global_seed = rd();

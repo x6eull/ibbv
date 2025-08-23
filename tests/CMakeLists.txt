@@ -14,6 +14,7 @@ if(IBBV_BENCHMARK)
   FetchContent_MakeAvailable(googlebenchmark)
 
   add_executable(ibbv_bench EXCLUDE_FROM_ALL bench.cpp)
+  add_compile_options(ibbv_bench PRIVATE -fno-exceptions -fno-rtti)
   target_include_directories(ibbv_bench PUBLIC
     ${PROJECT_SOURCE_DIR}/include
   )

@@ -13,17 +13,15 @@
 
 #include "SIMDHelper.h"
 
-#define DEFAULT_COPY(T)                                                        \
-  T(const T &) = default;                                                      \
-  T &operator=(const T &) = default;
-#define DEFAULT_MOVE(T)                                                        \
-  T(T &&) = default;                                                           \
-  T &operator=(T &&) = default;
-#define DEFAULT_COPY_MOVE(T) DEFAULT_COPY(T) DEFAULT_MOVE(T)
+#define DEFAULT_COPY_MOVE(T)                                                   \
+  T(const T &) noexcept = default;                                             \
+  T &operator=(const T &) noexcept = default;                                  \
+  T(T &&) noexcept = default;                                                  \
+  T &operator=(T &&) noexcept = default;
 
 /// A 512-bit vector contains 32*16-bit integers in ascending order,
 /// that is, {0, 1, 2, ..., 31} (from e0 to e31).
-static inline const auto asc_indexes =
+static inline const __m512i asc_indexes =
     _mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
                      16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 
@@ -328,21 +326,8 @@ public:
   }
 
   /// Construct empty vector
-  IndexedBlockBitVector(void) {}
-
-  /// Copy constructor
-  IndexedBlockBitVector(const IndexedBlockBitVector &other) = default;
-
-  /// Move constructor
-  IndexedBlockBitVector(IndexedBlockBitVector &&other) noexcept = default;
-
-  /// Copy assignment
-  IndexedBlockBitVector &
-  operator=(const IndexedBlockBitVector &other) = default;
-
-  /// Move assignment
-  IndexedBlockBitVector &
-  operator=(IndexedBlockBitVector &&other) noexcept = default;
+  IndexedBlockBitVector() {}
+  DEFAULT_COPY_MOVE(IndexedBlockBitVector);
 
   /// Returns true if no bits are set.
   bool empty() const noexcept { return indexes.empty(); }
