@@ -1,5 +1,4 @@
 #pragma once
-#include "benchmark/benchmark.h"
 #include "utils.h"
 
 namespace ibbv::test {
@@ -13,6 +12,7 @@ template <typename T> static void BM_copy(benchmark::State &state) {
     auto copy = bv_base;
     benchmark::DoNotOptimize(copy);
   }
+  state.SetItemsProcessed(state.iterations());
 }
 
 static const inline auto copy_args = {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -55,7 +56,7 @@ template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
   static_assert(BlockSize == 128,
                 "BlockSize other than 128 is unsupported currently");
 
-  template <typename T, size_t Align, size_t Threshold = Align>
+  template <typename T, size_t Align, size_t Threshold>
   class AlignedAllocatorWithThreshold : public std::allocator<T> {
   public:
     AlignedAllocatorWithThreshold() noexcept {}
@@ -168,10 +169,10 @@ public:
   using index_t = int32_t;
 
 protected:
-  using index_container =
-      std::vector<index_t, AlignedAllocatorWithThreshold<index_t, 64>>;
-  using block_container =
-      std::vector<Block, AlignedAllocatorWithThreshold<Block, 64>>;
+  template <typename T>
+  using default_allocator = AlignedAllocatorWithThreshold<T, 64, 64>;
+  using index_container = std::vector<index_t, default_allocator<index_t>>;
+  using block_container = std::vector<Block, default_allocator<Block>>;
   index_container indexes;
   block_container blocks;
 
@@ -256,11 +257,11 @@ public:
     IndexedBlockBitVectorIterator(const IndexedBlockBitVector &vec,
                                   bool end = false)
         : // must be init to identify raw vector
-          indexEnd(vec.indexes.end()), end(end | vec.empty()) {
+          indexEnd(vec.indexes.cend()), end(end | vec.empty()) {
       if (end)
         return;
-      indexIt = vec.indexes.begin();
-      blockIt = vec.blocks.begin();
+      indexIt = vec.indexes.cbegin();
+      blockIt = vec.blocks.cbegin();
       unit_index = 0;
       bit_index = 0;
       search();
@@ -364,13 +365,33 @@ public:
     blocks.clear();
   }
 
+  mutable size_t last_used_index{0};
+  inline typename index_container::const_iterator
+  find_lower_bound(index_t target_index) const noexcept {
+    if (empty())
+      return indexes.cbegin();
+    last_used_index = std::min(last_used_index, size() - 1);
+    // use last_used_index to accelerate binary search
+    const auto target = indexes.cbegin() + last_used_index;
+    if (*target == target_index)
+      return target;
+    else {
+      typename index_container::const_iterator result;
+      if (*target > target_index)
+        result = std::lower_bound(indexes.cbegin(), target, target_index);
+      else
+        result = std::lower_bound(target + 1, indexes.cend(), target_index);
+      last_used_index = result - indexes.cbegin();
+      return result;
+    }
+  }
+
   /// Returns true if n is in this set.
   bool test(index_t n) const noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos =
-        std::lower_bound(indexes.begin(), indexes.end(), target_ind);
-    const auto i = std::distance(indexes.begin(), low_pos);
-    if (low_pos == indexes.end() || *low_pos != target_ind) // not found
+    const auto low_pos = find_lower_bound(target_ind);
+    const auto i = std::distance(indexes.cbegin(), low_pos);
+    if (low_pos == indexes.cend() || *low_pos != target_ind) // not found
       return false;
     else
       return block_at(i).test(n % BlockSize);
@@ -378,10 +399,9 @@ public:
 
   void set(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos =
-        std::lower_bound(indexes.begin(), indexes.end(), target_ind);
-    const auto i = std::distance(indexes.begin(), low_pos);
-    if (low_pos == indexes.end() || *low_pos != target_ind) // not found
+    const auto low_pos = find_lower_bound(target_ind);
+    const auto i = std::distance(indexes.cbegin(), low_pos);
+    if (low_pos == indexes.cend() || *low_pos != target_ind) // not found
       emplace_at(i, target_ind, n % BlockSize);
     else
       return block_at(i).set(n % BlockSize);
@@ -391,10 +411,9 @@ public:
   /// Otherwise, sets bit and returns true.
   bool test_and_set(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos =
-        std::lower_bound(indexes.begin(), indexes.end(), target_ind);
-    const auto i = std::distance(indexes.begin(), low_pos);
-    if (low_pos == indexes.end() || *low_pos != target_ind) { // not found
+    const auto low_pos = find_lower_bound(target_ind);
+    const auto i = std::distance(indexes.cbegin(), low_pos);
+    if (low_pos == indexes.cend() || *low_pos != target_ind) { // not found
       emplace_at(i, target_ind, n % BlockSize);
       return true;
     } else
@@ -403,11 +422,10 @@ public:
 
   void reset(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos =
-        std::lower_bound(indexes.begin(), indexes.end(), target_ind);
-    if (low_pos == indexes.end() || *low_pos != target_ind)
+    const auto low_pos = find_lower_bound(target_ind);
+    if (low_pos == indexes.cend() || *low_pos != target_ind)
       return; // not found
-    const auto i = std::distance(indexes.begin(), low_pos);
+    const auto i = std::distance(indexes.cbegin(), low_pos);
     auto &d = block_at(i);
     d.reset(n % BlockSize);
     if (d.empty())
