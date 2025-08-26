@@ -2,7 +2,6 @@
 
 #include "IndexedBlockBitVector.h"
 #include "SparseBitVector.h"
-#include <benchmark/benchmark.h>
 #include <cstdint>
 #include <initializer_list>
 #include <random>

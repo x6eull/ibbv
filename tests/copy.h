@@ -1,4 +1,5 @@
 #pragma once
+#include <benchmark/benchmark.h>
 #include "utils.h"
 
 namespace ibbv::test {

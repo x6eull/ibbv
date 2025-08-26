@@ -27,9 +27,12 @@ install(EXPORT ibbvTargets
     DESTINATION lib/cmake/ibbv
 )
 
-option(IBBV_BENCHMARK "Enable ibbv benchmarking with Google Benchmark" OFF)
-if(IBBV_BENCHMARK)
+option(IBBV_TESTS "Enable ibbv benchmarking with Google Benchmark" OFF)
+if(IBBV_TESTS)
+  message(NOTICE "IBBV_TESTS enabled, target included")
+  include(CTest)
+  enable_testing()
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/tests)
 else()
-  message(NOTICE "IBBV_BENCHMARK disabled")
+  message(NOTICE "IBBV_TESTS disabled")
 endif()

@@ -395,8 +395,8 @@ public:
     blocks.clear();
   }
 
-  mutable index_const_iter_t last_used_index_iter{0};
-  mutable block_const_iter_t last_used_block_iter{0};
+  mutable index_const_iter_t last_used_index_iter{indexes.cbegin()};
+  mutable block_const_iter_t last_used_block_iter{blocks.cbegin()};
   inline std::pair<index_const_iter_t, block_const_iter_t>
   find_lower_bound(index_t target_index) const noexcept {
     if (empty())
@@ -416,7 +416,8 @@ public:
         result = std::lower_bound(last_used_index_iter + 1, indexes.cend(),
                                   target_index);
       last_used_index_iter = result;
-      return {result, get_iter(result)};
+      last_used_block_iter = get_iter(result);
+      return {last_used_index_iter, last_used_block_iter};
     }
   }
 
