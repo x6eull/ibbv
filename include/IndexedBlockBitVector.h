@@ -45,14 +45,15 @@ static inline size_t szudzik(size_t a, size_t b) {
   const auto advance_lhs = 16 - ibbv::utils::lzcnt(lemask_lhs),                \
              advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
 
-template <size_t... indices, typename Func>
-inline void unroll_loop(std::index_sequence<indices...>, Func f) {
-  (f(std::integral_constant<size_t, indices>()), ...);
+template <typename idx_type, idx_type... indices, typename Func>
+_inline void unroll_loop(std::integer_sequence<idx_type, indices...>, Func f) {
+  (f(std::integral_constant<idx_type, indices>()), ...);
 }
 
-template <size_t... indices, typename Func>
-inline bool unroll_loop_and(std::index_sequence<indices...>, Func f) {
-  return (f(std::integral_constant<size_t, indices>()) && ...);
+template <typename idx_type, idx_type... indices, typename Func>
+_inline bool unroll_loop_and(std::integer_sequence<idx_type, indices...>,
+                             Func f) {
+  return (f(std::integral_constant<idx_type, indices>()) && ...);
 }
 
 namespace ibbv {
@@ -514,7 +515,7 @@ public:
       auto dup_match_this = duplicate_bits(match_this);
 
       // compute OR result of matched blocks
-      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
+      unroll_loop(std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
         /// matched & ordered 4 blocks (8 u64) from memory.
         /// zero in case of out of bounds
         const auto v_this = _mm512_loadu_epi64(&block_at(lhs_i + i * 4));
@@ -625,7 +626,7 @@ public:
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
       // compute AND result of matched blocks
-      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
+      unroll_loop(std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
         const auto cur_gather_this_offset_u16x8 =
             _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
         const auto cur_gather_rhs_offset_u16x8 =
@@ -730,8 +731,8 @@ public:
       // align matched data of rhs to the shape of this.
       // we don't care unmatched position
       auto matched_this_temp = match_this, matched_rhs_temp = match_rhs;
-      auto rhs_block_temp_addr = rhs_block_temp,
-           rhs_block_addr = &rhs.block_at(rhs_i);
+      auto rhs_block_temp_addr = rhs_block_temp;
+      auto rhs_block_addr = &rhs.block_at(rhs_i);
       while (matched_this_temp) {
         const auto this_pad = ibbv::utils::tzcnt(matched_this_temp),
                    rhs_pad = ibbv::utils::tzcnt(matched_rhs_temp);
@@ -747,7 +748,7 @@ public:
       const auto dup_advance_lhs = duplicate_bits(advance_lhs_to_bits);
 
       // compute AND result of matched blocks
-      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
+      unroll_loop(std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
         /// matched & ordered 4 blocks (8 u64) from memory. zero
         /// in case of out of bounds
         const auto v_this = _mm512_maskz_loadu_epi64(dup_advance_lhs >> (i * 8),
@@ -859,8 +860,8 @@ public:
 
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
-      const auto cur_result =
-          unroll_loop_and(std::make_index_sequence<4>(), [&](const auto i) {
+      const auto cur_result = unroll_loop_and(
+          std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
             const auto cur_gather_this_offset_u16x8 =
                 _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
             const auto cur_gather_rhs_offset_u16x8 =
