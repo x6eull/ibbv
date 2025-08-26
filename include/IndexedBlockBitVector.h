@@ -908,7 +908,7 @@ public:
   bool contains(const IndexedBlockBitVector &rhs) const noexcept {
     return contains_simd(rhs);
   }
-  
+
   // TODO simd
   bool intersects(const IndexedBlockBitVector &rhs) const noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
@@ -968,9 +968,13 @@ public:
     *this = lhs;
     intersectWithComplement(rhs);
   }
-
-  size_t hash() const noexcept {
-    return szudzik(count(), szudzik(size(), size() > 0 ? *begin() : -1));
-  }
 };
 } // namespace ibbv
+
+namespace std {
+template <> struct hash<ibbv::IndexedBlockBitVector<>> {
+  std::size_t operator()(const ibbv::IndexedBlockBitVector<> &s) const {
+    return szudzik(s.count(), s.find_first());
+  }
+};
+} // namespace std
