@@ -908,6 +908,26 @@ public:
   bool contains(const IndexedBlockBitVector &rhs) const noexcept {
     return contains_simd(rhs);
   }
+  
+  // TODO simd
+  bool intersects(const IndexedBlockBitVector &rhs) const noexcept {
+    const auto this_size = size(), rhs_size = rhs.size();
+    size_t lhs_i = 0, rhs_i = 0;
+    while (lhs_i < this_size && rhs_i < rhs_size) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind < rhs_ind)
+        ++lhs_i;
+      else if (lhs_ind > rhs_ind)
+        ++rhs_i;
+      else { // lhs_ind == rhs_ind
+        if (block_at(lhs_i).intersects(rhs.block_at(rhs_i)))
+          return true;
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    return false;
+  }
 
   bool operator==(const IndexedBlockBitVector &rhs) const noexcept {
     if (size() != rhs.size())
