@@ -15,7 +15,7 @@ template <typename T> static void BM_set_seq(benchmark::State &state) {
 }
 
 static const inline auto set_seq_args = {
-    benchmark::CreateRange(1, 1 << 16, 2),
+    benchmark::CreateRange(1, 1LL << 24, 16),
     concat_vec({{1}, benchmark::CreateRange(2, 128, 4)}),
 };
 BENCHMARK(BM_set_seq<IBBV>)->ArgsProduct(set_seq_args);

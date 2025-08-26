@@ -53,44 +53,6 @@ void unroll_loop(std::index_sequence<indices...>, Func f) {
 namespace ibbv {
 using namespace ibbv::utils;
 template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
-  static_assert(BlockSize == 128,
-                "BlockSize other than 128 is unsupported currently");
-
-  template <typename T, size_t Align, size_t Threshold>
-  class AlignedAllocatorWithThreshold : public std::allocator<T> {
-  public:
-    AlignedAllocatorWithThreshold() noexcept {}
-    template <class U> struct rebind {
-      using other = AlignedAllocatorWithThreshold<U, Align, Threshold>;
-    };
-
-    /// Removes default initialization behaviour.
-    template <class U> void construct(U *p) noexcept {}
-
-    [[nodiscard]] T *allocate(std::size_t n) {
-      const auto nbytes = n * sizeof(T);
-      if (nbytes >= Threshold)
-        return reinterpret_cast<T *>(
-            ::operator new(nbytes, std::align_val_t{Align}));
-      else
-        return reinterpret_cast<T *>(::operator new(nbytes));
-    }
-
-    void deallocate(T *p, std::size_t n) noexcept {
-      const auto nbytes = n * sizeof(T);
-      if (nbytes >= Threshold)
-        ::operator delete(p, std::align_val_t{Align});
-      else
-        ::operator delete(p);
-    }
-
-    bool operator==(const AlignedAllocatorWithThreshold &) const noexcept {
-      return true;
-    }
-    bool operator!=(const AlignedAllocatorWithThreshold &) const noexcept {
-      return false;
-    }
-  };
 
 public:
   using UnitType = uint64_t;
@@ -169,12 +131,63 @@ public:
   using index_t = int32_t;
 
 protected:
-  template <typename T>
-  using default_allocator = AlignedAllocatorWithThreshold<T, 64, 64>;
+  static_assert(BlockSize == 128,
+                "BlockSize other than 128 is unsupported currently");
+
+  template <typename T, size_t Align, size_t Threshold>
+  class IbbvAllocator : public std::allocator<T> {
+    static_assert(std::is_same_v<T, index_t> || std::is_same_v<T, Block>,
+                  "Unsupported type");
+
+  protected:
+    IndexedBlockBitVector<> *ibbv;
+
+  public:
+    IbbvAllocator(IndexedBlockBitVector<> *ibbv) noexcept : ibbv(ibbv) {}
+    template <class U> struct rebind {
+      using other = IbbvAllocator<U, Align, Threshold>;
+    };
+
+    /// Removes default initialization behaviour.
+    template <class U> void construct(U *p) noexcept {}
+
+    [[nodiscard]] T *allocate(std::size_t n) {
+      const auto nbytes = n * sizeof(T);
+      T *result;
+      if (nbytes >= Threshold)
+        result = reinterpret_cast<T *>(
+            ::operator new(nbytes, std::align_val_t{Align}));
+      else
+        result = reinterpret_cast<T *>(::operator new(nbytes));
+      if constexpr (std::is_same_v<T, index_t>) {
+        ibbv->last_used_index_iter = static_cast<index_const_iter_t>(
+            result + (ibbv->last_used_index_iter - ibbv->indexes.begin()));
+      } else if constexpr (std::is_same_v<T, Block>) {
+        ibbv->last_used_block_iter = static_cast<block_const_iter_t>(
+            result + (ibbv->last_used_block_iter - ibbv->blocks.begin()));
+      } else
+        __builtin_unreachable();
+      return result;
+    }
+
+    void deallocate(T *p, std::size_t n) noexcept {
+      const auto nbytes = n * sizeof(T);
+      if (nbytes >= Threshold)
+        ::operator delete(p, std::align_val_t{Align});
+      else
+        ::operator delete(p);
+    }
+  };
+
+  template <typename T> using default_allocator = IbbvAllocator<T, 64, 64>;
   using index_container = std::vector<index_t, default_allocator<index_t>>;
   using block_container = std::vector<Block, default_allocator<Block>>;
-  index_container indexes;
-  block_container blocks;
+  index_container indexes{default_allocator<index_t>(this)};
+  block_container blocks{default_allocator<Block>(this)};
+  using index_iter_t = typename index_container::iterator;
+  using index_const_iter_t = typename index_container::const_iterator;
+  using block_iter_t = typename block_container::iterator;
+  using block_const_iter_t = typename block_container::const_iterator;
 
   /// Returns # of blocks.
   _inline size_t size() const noexcept { return indexes.size(); }
@@ -190,10 +203,21 @@ protected:
     blocks.resize(keep_count);
   }
   template <typename... Args>
+  _inline void emplace_at(const index_iter_t &index_iter,
+                          const block_iter_t &block_iter, const index_t &ind,
+                          Args &&...blkArgs) noexcept {
+    indexes.emplace(index_iter, ind);
+    blocks.emplace(block_iter, std::forward<Args>(blkArgs)...);
+  }
+  template <typename... Args>
   _inline void emplace_at(size_t i, const index_t &ind,
                           Args &&...blkArgs) noexcept {
-    indexes.emplace(indexes.begin() + i, ind);
-    blocks.emplace(blocks.begin() + i, std::forward<Args>(blkArgs)...);
+    return emplace_at(indexes.cbegin() + i, blocks.cbegin() + i, ind,
+                      std::forward<Args>(blkArgs)...);
+  }
+  _inline block_const_iter_t
+  get_iter(const index_const_iter_t &it) const noexcept {
+    return blocks.cbegin() + (it - indexes.cbegin());
   }
 
 public:
@@ -207,9 +231,9 @@ public:
     index_t cur_pos;
 
   protected:
-    typename index_container::const_iterator indexIt;
-    typename index_container::const_iterator indexEnd;
-    typename block_container::const_iterator blockIt;
+    index_iter_t indexIt;
+    index_iter_t indexEnd;
+    block_iter_t blockIt;
     unsigned char unit_index; // unit index in the current block
     unsigned char bit_index;  // bit index in the current unit
     bool end;
@@ -365,71 +389,81 @@ public:
     blocks.clear();
   }
 
-  mutable size_t last_used_index{0};
-  inline typename index_container::const_iterator
+  mutable index_const_iter_t last_used_index_iter{0};
+  mutable block_const_iter_t last_used_block_iter{0};
+  inline std::pair<index_const_iter_t, block_const_iter_t>
   find_lower_bound(index_t target_index) const noexcept {
     if (empty())
-      return indexes.cbegin();
-    last_used_index = std::min(last_used_index, size() - 1);
-    // use last_used_index to accelerate binary search
-    const auto target = indexes.cbegin() + last_used_index;
-    if (*target == target_index)
-      return target;
+      return {indexes.cbegin(), blocks.cbegin()};
+    if (last_used_index_iter >= indexes.end()) {
+      last_used_index_iter = indexes.cend() - 1;
+      last_used_block_iter = blocks.cend() - 1;
+    }
+    if (*last_used_index_iter == target_index)
+      return {last_used_index_iter, last_used_block_iter};
     else {
       typename index_container::const_iterator result;
-      if (*target > target_index)
-        result = std::lower_bound(indexes.cbegin(), target, target_index);
+      if (*last_used_index_iter > target_index)
+        result = std::lower_bound(indexes.cbegin(), last_used_index_iter,
+                                  target_index);
       else
-        result = std::lower_bound(target + 1, indexes.cend(), target_index);
-      last_used_index = result - indexes.cbegin();
-      return result;
+        result = std::lower_bound(last_used_index_iter + 1, indexes.cend(),
+                                  target_index);
+      last_used_index_iter = result;
+      return {result, get_iter(result)};
     }
+  }
+
+  inline std::pair<index_iter_t, block_iter_t>
+  find_lower_bound_mut(index_t target_index) noexcept {
+    const auto [idx_it, blk_it] = find_lower_bound(target_index);
+    return {indexes.begin() + (idx_it - indexes.cbegin()),
+            blocks.begin() + (blk_it - blocks.cbegin())};
   }
 
   /// Returns true if n is in this set.
   bool test(index_t n) const noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos = find_lower_bound(target_ind);
-    const auto i = std::distance(indexes.cbegin(), low_pos);
-    if (low_pos == indexes.cend() || *low_pos != target_ind) // not found
+    const auto [index_iter, block_iter] = find_lower_bound(target_ind);
+    if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
       return false;
     else
-      return block_at(i).test(n % BlockSize);
+      return block_iter->test(n % BlockSize);
   }
 
   void set(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos = find_lower_bound(target_ind);
-    const auto i = std::distance(indexes.cbegin(), low_pos);
-    if (low_pos == indexes.cend() || *low_pos != target_ind) // not found
-      emplace_at(i, target_ind, n % BlockSize);
+    const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
+    if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
+      emplace_at(index_iter, block_iter, target_ind, n % BlockSize);
     else
-      return block_at(i).set(n % BlockSize);
+      return block_iter->set(n % BlockSize);
   }
 
   /// Check if bit is set. If it is, returns false.
   /// Otherwise, sets bit and returns true.
   bool test_and_set(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos = find_lower_bound(target_ind);
-    const auto i = std::distance(indexes.cbegin(), low_pos);
-    if (low_pos == indexes.cend() || *low_pos != target_ind) { // not found
-      emplace_at(i, target_ind, n % BlockSize);
+    const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
+    if (index_iter == indexes.cend() ||
+        *index_iter != target_ind) { // not found
+      emplace_at(index_iter, block_iter, target_ind, n % BlockSize);
       return true;
     } else
-      return block_at(i).test_and_set(n % BlockSize);
+      return block_iter->test_and_set(n % BlockSize);
   }
 
   void reset(index_t n) noexcept {
     const auto target_ind = n - (n % BlockSize);
-    const auto low_pos = find_lower_bound(target_ind);
-    if (low_pos == indexes.cend() || *low_pos != target_ind)
+    const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
+    if (index_iter == indexes.cend() || *index_iter != target_ind)
       return; // not found
-    const auto i = std::distance(indexes.cbegin(), low_pos);
-    auto &d = block_at(i);
+    auto &d = *block_iter;
     d.reset(n % BlockSize);
-    if (d.empty())
-      erase_at(i); // this block is empty, remove it
+    if (d.empty()) {
+      indexes.erase(index_iter);
+      blocks.erase(block_iter);
+    }
   }
 
   bool union_simd(const IndexedBlockBitVector &rhs) {

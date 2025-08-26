@@ -18,13 +18,19 @@ using SBV = llvm::SparseBitVector<BlockSize>;
 
 static std::random_device rd;
 static const auto global_seed = rd();
-static inline common_rep stable_random_dist(ele_idx n, ele_idx max) {
+static inline std::mt19937 mix_seed(std::initializer_list<uint32_t> seeds) {
+  auto s = global_seed;
+  for (const auto t : seeds)
+    s ^= t;
+  return std::mt19937(s);
+}
+static inline common_rep stable_random_dist(std::mt19937 gen, ele_idx n,
+                                            ele_idx max) {
   constexpr ele_idx min = 0;
   if (n <= 0)
     return common_rep{};
 
   static common_rep unique_numbers;
-  std::mt19937 gen(global_seed ^ n ^ min ^ max);
   std::uniform_int_distribution<ele_idx> dis(min, max);
 
   unique_numbers.reserve(n);
@@ -38,6 +44,9 @@ static inline common_rep stable_random_dist(ele_idx n, ele_idx max) {
   }
 
   return unique_numbers;
+}
+static inline common_rep stable_random_dist(ele_idx n, ele_idx max) {
+  return stable_random_dist(mix_seed({(uint32_t)n, (uint32_t)max}), n, max);
 }
 
 template <typename T> T from_common(const common_rep &rep) {
