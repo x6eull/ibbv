@@ -46,8 +46,13 @@ static inline size_t szudzik(size_t a, size_t b) {
              advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
 
 template <size_t... indices, typename Func>
-void unroll_loop(std::index_sequence<indices...>, Func f) {
+inline void unroll_loop(std::index_sequence<indices...>, Func f) {
   (f(std::integral_constant<size_t, indices>()), ...);
+}
+
+template <size_t... indices, typename Func>
+inline bool unroll_loop_and(std::index_sequence<indices...>, Func f) {
+  return (f(std::integral_constant<size_t, indices>()) && ...);
 }
 
 namespace ibbv {
@@ -854,29 +859,34 @@ public:
 
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
-      unroll_loop(std::make_index_sequence<4>(), [&](const auto i) {
-        const auto cur_gather_this_offset_u16x8 =
-            _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
-        const auto cur_gather_rhs_offset_u16x8 =
-            _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
+      const auto cur_result =
+          unroll_loop_and(std::make_index_sequence<4>(), [&](const auto i) {
+            const auto cur_gather_this_offset_u16x8 =
+                _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
+            const auto cur_gather_rhs_offset_u16x8 =
+                _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
 
-        const auto cur_gather_this_offset_u64x8 =
-            _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
-        const auto cur_gather_rhs_offset_u64x8 =
-            _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
+            const auto cur_gather_this_offset_u64x8 =
+                _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
+            const auto cur_gather_rhs_offset_u64x8 =
+                _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
 
-        const auto intersect_this = _mm512_mask_i64gather_epi64(
-            all_zero, n_matched_bits_dup >> i * 8, cur_gather_this_offset_u64x8,
-            gather_this_base_addr, 8);
-        const auto intersect_rhs = _mm512_mask_i64gather_epi64(
-            all_zero, n_matched_bits_dup >> i * 8, cur_gather_rhs_offset_u64x8,
-            gather_rhs_base_addr, 8);
+            const auto intersect_this = _mm512_mask_i64gather_epi64(
+                all_zero, n_matched_bits_dup >> i * 8,
+                cur_gather_this_offset_u64x8, gather_this_base_addr, 8);
+            const auto intersect_rhs = _mm512_mask_i64gather_epi64(
+                all_zero, n_matched_bits_dup >> i * 8,
+                cur_gather_rhs_offset_u64x8, gather_rhs_base_addr, 8);
 
-        const auto and_result = _mm512_and_epi64(intersect_this, intersect_rhs);
+            const auto and_result =
+                _mm512_and_epi64(intersect_this, intersect_rhs);
 
-        if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs))
-          return false;
-      });
+            if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs))
+              return false;
+            return true;
+          });
+      if (!cur_result)
+        return false;
       lhs_i += advance_lhs, rhs_i += advance_rhs;
     }
     while (lhs_i < size() && rhs_i < rhs.size()) {
@@ -924,7 +934,7 @@ public:
 
   /// Inplace intersection with rhs.
   /// Returns true if this set changed.
-  bool operator&=(const IndexedBlockBitVector &rhs) {
+  bool operator&=(const IndexedBlockBitVector &rhs) noexcept {
     return intersect_simd(rhs);
   }
 
