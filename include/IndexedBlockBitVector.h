@@ -231,9 +231,9 @@ public:
     index_t cur_pos;
 
   protected:
-    index_iter_t indexIt;
-    index_iter_t indexEnd;
-    block_iter_t blockIt;
+    index_const_iter_t indexIt;
+    index_const_iter_t indexEnd;
+    block_const_iter_t blockIt;
     unsigned char unit_index; // unit index in the current block
     unsigned char bit_index;  // bit index in the current unit
     bool end;
