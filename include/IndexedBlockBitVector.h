@@ -59,6 +59,8 @@ _inline bool unroll_loop_and(std::integer_sequence<idx_type, indices...>,
 namespace ibbv {
 using namespace ibbv::utils;
 template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
+  static_assert(BlockSize == 128,
+                "BlockSize other than 128 is unsupported currently");
 
 public:
   using UnitType = uint64_t;
@@ -137,25 +139,17 @@ public:
   using index_t = int32_t;
 
 protected:
-  static_assert(BlockSize == 128,
-                "BlockSize other than 128 is unsupported currently");
-
   template <typename T, size_t Align, size_t Threshold>
   class IbbvAllocator : public std::allocator<T> {
-    static_assert(std::is_same_v<T, index_t> || std::is_same_v<T, Block>,
-                  "Unsupported type");
-
-  protected:
-    IndexedBlockBitVector<> *ibbv;
-
   public:
-    IbbvAllocator(IndexedBlockBitVector<> *ibbv) noexcept : ibbv(ibbv) {}
     template <class U> struct rebind {
       using other = IbbvAllocator<U, Align, Threshold>;
     };
 
     /// Removes default initialization behaviour.
     template <class U> void construct(U *p) noexcept {}
+    /// No destruction behaviour.
+    template <class U> void destroy(U *p) noexcept {}
 
     [[nodiscard]] T *allocate(std::size_t n) {
       const auto nbytes = n * sizeof(T);
@@ -165,14 +159,6 @@ protected:
             ::operator new(nbytes, std::align_val_t{Align}));
       else
         result = reinterpret_cast<T *>(::operator new(nbytes));
-      if constexpr (std::is_same_v<T, index_t>) {
-        ibbv->last_used_index_iter = static_cast<index_const_iter_t>(
-            result + (ibbv->last_used_index_iter - ibbv->indexes.begin()));
-      } else if constexpr (std::is_same_v<T, Block>) {
-        ibbv->last_used_block_iter = static_cast<block_const_iter_t>(
-            result + (ibbv->last_used_block_iter - ibbv->blocks.begin()));
-      } else
-        __builtin_unreachable();
       return result;
     }
 
@@ -185,11 +171,11 @@ protected:
     }
   };
 
-  template <typename T> using default_allocator = IbbvAllocator<T, 64, 64>;
+  template <typename T> using default_allocator = IbbvAllocator<T, 64, 0>;
   using index_container = std::vector<index_t, default_allocator<index_t>>;
   using block_container = std::vector<Block, default_allocator<Block>>;
-  index_container indexes{default_allocator<index_t>(this)};
-  block_container blocks{default_allocator<Block>(this)};
+  index_container indexes{};
+  block_container blocks{};
   using index_iter_t = typename index_container::iterator;
   using index_const_iter_t = typename index_container::const_iterator;
   using block_iter_t = typename block_container::iterator;
@@ -200,10 +186,6 @@ protected:
   _inline index_t index_at(size_t i) const noexcept { return indexes[i]; }
   _inline Block &block_at(size_t i) noexcept { return blocks[i]; }
   _inline const Block &block_at(size_t i) const noexcept { return blocks[i]; }
-  _inline void erase_at(size_t i) noexcept {
-    indexes.erase(indexes.begin() + i);
-    blocks.erase(blocks.begin() + i);
-  }
   _inline void truncate(size_t keep_count) noexcept {
     indexes.resize(keep_count);
     blocks.resize(keep_count);
@@ -224,6 +206,21 @@ protected:
   _inline block_const_iter_t
   get_iter(const index_const_iter_t &it) const noexcept {
     return blocks.cbegin() + (it - indexes.cbegin());
+  }
+  _inline block_iter_t get_iter(const index_iter_t &it) noexcept {
+    return blocks.begin() + (it - indexes.begin());
+  }
+  inline std::pair<index_const_iter_t, block_const_iter_t>
+  find_lower_bound(index_t target_index) const noexcept {
+    auto result =
+        std::lower_bound(indexes.cbegin(), indexes.cend(), target_index);
+    return {result, get_iter(result)};
+  }
+  inline std::pair<index_iter_t, block_iter_t>
+  find_lower_bound_mut(index_t target_index) noexcept {
+    auto result =
+        std::lower_bound(indexes.begin(), indexes.end(), target_index);
+    return {result, get_iter(result)};
   }
 
 public:
@@ -395,38 +392,6 @@ public:
     blocks.clear();
   }
 
-  mutable index_const_iter_t last_used_index_iter{indexes.cbegin()};
-  mutable block_const_iter_t last_used_block_iter{blocks.cbegin()};
-  inline std::pair<index_const_iter_t, block_const_iter_t>
-  find_lower_bound(index_t target_index) const noexcept {
-    if (empty())
-      return {indexes.cbegin(), blocks.cbegin()};
-    if (last_used_index_iter >= indexes.end()) {
-      last_used_index_iter = indexes.cend() - 1;
-      last_used_block_iter = blocks.cend() - 1;
-    }
-    if (*last_used_index_iter == target_index)
-      return {last_used_index_iter, last_used_block_iter};
-    else {
-      typename index_container::const_iterator result;
-      if (*last_used_index_iter > target_index)
-        result = std::lower_bound(indexes.cbegin(), last_used_index_iter,
-                                  target_index);
-      else
-        result = std::lower_bound(last_used_index_iter + 1, indexes.cend(),
-                                  target_index);
-      last_used_index_iter = result;
-      last_used_block_iter = get_iter(result);
-      return {last_used_index_iter, last_used_block_iter};
-    }
-  }
-
-  inline std::pair<index_iter_t, block_iter_t>
-  find_lower_bound_mut(index_t target_index) noexcept {
-    const auto [idx_it, blk_it] = find_lower_bound(target_index);
-    return {indexes.begin() + (idx_it - indexes.cbegin()),
-            blocks.begin() + (blk_it - blocks.cbegin())};
-  }
 
   /// Returns true if n is in this set.
   bool test(index_t n) const noexcept {
@@ -664,13 +629,13 @@ public:
         nzero_mask_by_block |= ((nzero_mask & 0b01010101) << 1);
         // store new index & data for 4 blocks (remove empty
         // blocks)
-        _mm512_mask_compressstoreu_epi32(indexes.data() + valid_count,
+        _mm512_mask_compressstoreu_epi32(&indexes[valid_count],
                                          nzero_compressed << (i * 4),
                                          ordered_indexes);
-        _mm512_mask_compressstoreu_epi64(blocks.data() + valid_count,
+        _mm512_mask_compressstoreu_epi64(&blocks[valid_count],
                                          nzero_mask_by_block, and_result);
 
-        const auto nzero_count = _mm_popcnt_u32(nzero_compressed);
+        const auto nzero_count = ibbv::utils::popcnt(nzero_compressed);
         valid_count += nzero_count;
       });
       lhs_i += advance_lhs, rhs_i += advance_rhs;
@@ -970,13 +935,15 @@ public:
     *this = lhs;
     intersectWithComplement(rhs);
   }
+
+  friend struct std::hash<ibbv::IndexedBlockBitVector<>>;
 };
 } // namespace ibbv
 
 namespace std {
 template <> struct hash<ibbv::IndexedBlockBitVector<>> {
   std::size_t operator()(const ibbv::IndexedBlockBitVector<> &s) const {
-    return szudzik(s.count(), s.find_first());
+    return szudzik(s.count(), szudzik(s.size(), s.find_first()));
   }
 };
 } // namespace std
