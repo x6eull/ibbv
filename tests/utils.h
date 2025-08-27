@@ -4,7 +4,9 @@
 #include "SparseBitVector.h"
 #include <cstdint>
 #include <initializer_list>
+#include <iostream>
 #include <random>
+#include <set>
 #include <unordered_set>
 
 namespace ibbv::test {
@@ -15,8 +17,7 @@ constexpr inline unsigned short BlockSize = 128;
 using IBBV = ibbv::IndexedBlockBitVector<BlockSize>;
 using SBV = llvm::SparseBitVector<BlockSize>;
 
-static std::random_device rd;
-static const auto global_seed = rd();
+static const auto global_seed = std::random_device{}();
 static inline std::mt19937 mix_seed(std::initializer_list<uint32_t> seeds) {
   auto s = global_seed;
   for (const auto t : seeds)
@@ -29,7 +30,7 @@ static inline common_rep stable_random_dist(std::mt19937 gen, ele_idx n,
   if (n <= 0)
     return common_rep{};
 
-  static common_rep unique_numbers;
+  common_rep unique_numbers;
   std::uniform_int_distribution<ele_idx> dis(min, max);
 
   unique_numbers.reserve(n);
@@ -47,6 +48,21 @@ static inline common_rep stable_random_dist(std::mt19937 gen, ele_idx n,
 static inline common_rep stable_random_dist(ele_idx n, ele_idx max) {
   return stable_random_dist(mix_seed({(uint32_t)n, (uint32_t)max}), n, max);
 }
+static inline std::mt19937 shared_gen(global_seed);
+static inline std::set<ele_idx> random_dist(ele_idx n, ele_idx max) {
+  std::cout << "using random seed " << global_seed << std::endl;
+  constexpr ele_idx min = 0;
+  if (n <= 0)
+    return std::set<ele_idx>{};
+
+  std::set<ele_idx> nums;
+  std::uniform_int_distribution<ele_idx> dis(min, max);
+
+  for (int i = 0; i < n; ++i)
+    nums.insert(dis(shared_gen));
+
+  return nums;
+}
 
 template <typename T> T from_common(const common_rep &rep) {
   T vec;
@@ -58,6 +74,12 @@ template <typename T> common_rep to_common(const T &bv) {
   common_rep rep;
   for (const auto i : bv)
     rep.emplace(i);
+  return rep;
+}
+template <typename T> std::set<ele_idx> to_common_sorted(const T &bv) {
+  std::set<ele_idx> rep;
+  for (const auto i : bv)
+    rep.insert(i);
   return rep;
 }
 
