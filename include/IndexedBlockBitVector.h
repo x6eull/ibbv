@@ -171,7 +171,7 @@ protected:
     }
   };
 
-  template <typename T> using default_allocator = IbbvAllocator<T, 64, 0>;
+  template <typename T> using default_allocator = IbbvAllocator<T, 64, 64>;
   using index_container = std::vector<index_t, default_allocator<index_t>>;
   using block_container = std::vector<Block, default_allocator<Block>>;
   index_container indexes{};
@@ -338,21 +338,6 @@ public:
     return *begin();
   }
 
-  /// Return the last set bit in the bitmap.  Return -1 if no bits are set.
-  index_t find_last() const {
-    if (empty())
-      return -1;
-    const auto &last_blk = blocks.back();
-    index_t last_index = indexes.back() + BlockSize - 1;
-    for (auto i = UnitsPerBlock - 1; i >= 0; i--) {
-      const auto cnt = ibbv::utils::lzcnt(last_blk.data[i]);
-      last_index -= cnt;
-      if (cnt < UnitBits)
-        return last_index;
-    }
-    __builtin_unreachable(); // all bits are zero ?
-  }
-
   /// Construct empty vector
   IndexedBlockBitVector() {}
   DEFAULT_COPY_MOVE(IndexedBlockBitVector);
@@ -391,7 +376,6 @@ public:
     indexes.clear();
     blocks.clear();
   }
-
 
   /// Returns true if n is in this set.
   bool test(index_t n) const noexcept {

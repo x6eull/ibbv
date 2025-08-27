@@ -6,8 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include_directories(src)
-
 add_library(ibbv INTERFACE 
   ${CMAKE_CURRENT_LIST_DIR}/include/IndexedBlockBitVector.h
   ${CMAKE_CURRENT_LIST_DIR}/include/SIMDHelper.h
