@@ -186,11 +186,13 @@ protected:
     }
   };
 
-  template <typename T> using default_allocator = IbbvAllocator<T, 64, 64>;
-  using index_container = std::vector<index_t, default_allocator<index_t>>;
-  using block_container = std::vector<Block, default_allocator<Block>>;
-  index_container indexes{default_allocator<index_t>{this}};
-  block_container blocks{default_allocator<Block>{this}};
+  using index_allocator = IbbvAllocator<index_t, 64, 64>;
+  using index_container = std::vector<index_t, index_allocator>;
+  using block_allocator =
+      IbbvAllocator<Block, 64, 64 / sizeof(index_t) * sizeof(Block)>;
+  using block_container = std::vector<Block, block_allocator>;
+  index_container indexes{index_allocator{this}};
+  block_container blocks{block_allocator{this}};
   using index_iter_t = typename index_container::iterator;
   using index_const_iter_t = typename index_container::const_iterator;
   using block_iter_t = typename block_container::iterator;
