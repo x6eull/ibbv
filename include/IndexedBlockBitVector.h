@@ -20,42 +20,6 @@
   T(T &&) noexcept = default;                                                  \
   T &operator=(T &&) noexcept = default;
 
-/// A 512-bit vector contains 32*16-bit integers in ascending order,
-/// that is, {0, 1, 2, ..., 31} (from e0 to e31).
-static inline const __m512i asc_indexes =
-    _mm512_set_epi16(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
-                     16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
-
-static inline size_t szudzik(size_t a, size_t b) {
-  return a > b ? b * b + a : a * a + a + b;
-}
-
-#define ADV_COUNT                                                              \
-  /**the maximum index in current range [lhs_i..=lhs_i + 15], spread to        \
-   * vector register */                                                        \
-  const auto rangemax_lhs = _mm512_set1_epi32(lhs.index_at(lhs_i + 15)),       \
-             rangemax_rhs = _mm512_set1_epi32(rhs.index_at(rhs_i + 15));       \
-  /**whether each u32 index is less than or equal to the maximum index in      \
-   * current range of the other vector */                                      \
-  const uint16_t lemask_lhs =                                                  \
-                     _mm512_cmple_epu32_mask(v_lhs_idx, rangemax_rhs),         \
-                 lemask_rhs =                                                  \
-                     _mm512_cmple_epu32_mask(v_rhs_idx, rangemax_lhs);         \
-  /**the number to increase for lhs_i / rhs_i, <= 16 */                        \
-  const auto advance_lhs = 16 - ibbv::utils::lzcnt(lemask_lhs),                \
-             advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
-
-template <typename idx_type, idx_type... indices, typename Func>
-_inline void unroll_loop(std::integer_sequence<idx_type, indices...>, Func f) {
-  (f(std::integral_constant<idx_type, indices>()), ...);
-}
-
-template <typename idx_type, idx_type... indices, typename Func>
-_inline bool unroll_loop_and(std::integer_sequence<idx_type, indices...>,
-                             Func f) {
-  return (f(std::integral_constant<idx_type, indices>()) && ...);
-}
-
 namespace ibbv {
 using namespace ibbv::utils;
 template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
@@ -221,7 +185,7 @@ protected:
                       std::forward<Args>(blkArgs)...);
   }
   _inline block_const_iter_t
-  get_iter(const index_const_iter_t &it) const noexcept {
+  get_block_iter(const index_const_iter_t &it) const noexcept {
     return blocks.cbegin() + (it - indexes.cbegin());
   }
   mutable index_const_iter_t last_used_index{indexes.cbegin()};
@@ -243,7 +207,7 @@ protected:
                                  target_index)
               : std::lower_bound(indexes.cbegin(), last_used_index,
                                  target_index);
-      const auto blk_it = get_iter(idx_it);
+      const auto blk_it = get_block_iter(idx_it);
       last_used_index = idx_it;
       last_used_block = blk_it;
       return {last_used_index, last_used_block};
@@ -256,6 +220,44 @@ protected:
             blocks.begin() + (blk_it - blocks.cbegin())};
   }
 
+  /// Static helper methods
+  template <typename idx_type, idx_type... indices, typename Func>
+  static _inline void unroll_loop(std::integer_sequence<idx_type, indices...>,
+                                  Func f) {
+    (f(std::integral_constant<idx_type, indices>()), ...);
+  }
+  template <typename idx_type, idx_type... indices, typename Func>
+  static _inline bool
+  unroll_loop_and(std::integer_sequence<idx_type, indices...>, Func f) {
+    return (f(std::integral_constant<idx_type, indices>()) && ...);
+  }
+  static _inline std::pair<uint8_t, uint8_t>
+  adv_count(const IndexedBlockBitVector<> &lhs,
+            const IndexedBlockBitVector<> &rhs, const __m512i &lhs_idx,
+            const __m512i &rhs_idx, const size_t lhs_i, const size_t rhs_i) {
+    /**the maximum index in current range [lhs_i..=lhs_i + 15], spread to \
+     * vector register */
+    const auto rangemax_lhs = _mm512_set1_epi32(lhs.index_at(lhs_i + 15)),
+               rangemax_rhs = _mm512_set1_epi32(rhs.index_at(rhs_i + 15));
+    /**whether each u32 index is less than or equal to the maximum index in
+     * current range of the other vector */
+    const uint16_t lemask_lhs = _mm512_cmple_epu32_mask(lhs_idx, rangemax_rhs),
+                   lemask_rhs = _mm512_cmple_epu32_mask(rhs_idx, rangemax_lhs);
+    /**the number to increase for lhs_i / rhs_i, <= 16 */
+    const auto advance_lhs = 16 - ibbv::utils::lzcnt(lemask_lhs),
+               advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
+    return {advance_lhs, advance_rhs};
+  }
+  static inline size_t szudzik(size_t a, size_t b) {
+    return a > b ? b * b + a : a * a + a + b;
+  }
+  /// A 512-bit vector contains 32*16-bit integers in ascending order,
+  /// that is, {0, 1, 2, ..., 31} (from e0 to e31).
+  static inline const __m512i asc_indexes = _mm512_set_epi16(
+      31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14,
+      13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+
+  /// Public interfaces
 public:
   class IndexedBlockBitVectorIterator {
   public:
@@ -473,8 +475,8 @@ public:
       uint16_t match_this, match_rhs;
       ne_mm512_2intersect_epi32(v_lhs_idx, v_rhs_idx, match_this, match_rhs);
 
-      const IndexedBlockBitVector<> &lhs = *this;
-      ADV_COUNT;
+      const auto [advance_lhs, advance_rhs] =
+          adv_count(*this, rhs, v_lhs_idx, v_rhs_idx, lhs_i, rhs_i);
 
       auto match_this_temp = match_this;
       Block *store_blk_base = rhs_block_temp;
@@ -591,8 +593,8 @@ public:
       uint16_t match_this, match_rhs;
       ne_mm512_2intersect_epi32(v_lhs_idx, v_rhs_idx, match_this, match_rhs);
 
-      const IndexedBlockBitVector<> &lhs = *this;
-      ADV_COUNT;
+      const auto [advance_lhs, advance_rhs] =
+          adv_count(*this, rhs, v_lhs_idx, v_rhs_idx, lhs_i, rhs_i);
 
       /// compress the intersected data's offset(/8bytes).
       const auto gather_this_offset_u16x32 =
@@ -708,8 +710,8 @@ public:
       uint16_t match_this, match_rhs;
       ne_mm512_2intersect_epi32(v_lhs_idx, v_rhs_idx, match_this, match_rhs);
 
-      const IndexedBlockBitVector<> &lhs = *this;
-      ADV_COUNT;
+      const auto [advance_lhs, advance_rhs] =
+          adv_count(*this, rhs, v_lhs_idx, v_rhs_idx, lhs_i, rhs_i);
 
       // align matched data of rhs to the shape of this.
       // we don't care unmatched position
@@ -824,8 +826,8 @@ public:
       uint16_t match_this, match_rhs;
       ne_mm512_2intersect_epi32(v_lhs_idx, v_rhs_idx, match_this, match_rhs);
 
-      const IndexedBlockBitVector<> &lhs = *this;
-      ADV_COUNT;
+      const auto [advance_lhs, advance_rhs] =
+          adv_count(*this, rhs, v_lhs_idx, v_rhs_idx, lhs_i, rhs_i);
 
       /// count of matched indexes
       const auto n_matched = ibbv::utils::popcnt((uint32_t)match_this);
@@ -960,7 +962,9 @@ public:
 namespace std {
 template <> struct hash<ibbv::IndexedBlockBitVector<>> {
   std::size_t operator()(const ibbv::IndexedBlockBitVector<> &s) const {
-    return szudzik(s.count(), szudzik(s.size(), s.find_first()));
+    return ibbv::IndexedBlockBitVector<>::szudzik(
+        s.count(),
+        ibbv::IndexedBlockBitVector<>::szudzik(s.size(), s.find_first()));
   }
 };
 } // namespace std
