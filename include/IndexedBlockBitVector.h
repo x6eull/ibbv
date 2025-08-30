@@ -141,7 +141,16 @@ public:
 protected:
   template <typename T, size_t Align, size_t Threshold>
   class IbbvAllocator : public std::allocator<T> {
+    static_assert(std::is_same_v<index_t, T> || std::is_same_v<Block, T>,
+                  "Unsupported type");
+
+  protected:
+    IndexedBlockBitVector<> *ibbv;
+
   public:
+    IbbvAllocator(IndexedBlockBitVector<> *ibbv) : ibbv(ibbv) {}
+    DEFAULT_COPY_MOVE(IbbvAllocator)
+
     template <class U> struct rebind {
       using other = IbbvAllocator<U, Align, Threshold>;
     };
@@ -159,6 +168,12 @@ protected:
             ::operator new(nbytes, std::align_val_t{Align}));
       else
         result = reinterpret_cast<T *>(::operator new(nbytes));
+      if constexpr (std::is_same_v<index_t, T>)
+        ibbv->last_used_index = static_cast<index_const_iter_t>(
+            result + (ibbv->last_used_index - ibbv->indexes.cbegin()));
+      else
+        ibbv->last_used_block = static_cast<block_const_iter_t>(
+            result + (ibbv->last_used_block - ibbv->blocks.cbegin()));
       return result;
     }
 
@@ -174,8 +189,8 @@ protected:
   template <typename T> using default_allocator = IbbvAllocator<T, 64, 64>;
   using index_container = std::vector<index_t, default_allocator<index_t>>;
   using block_container = std::vector<Block, default_allocator<Block>>;
-  index_container indexes{};
-  block_container blocks{};
+  index_container indexes{default_allocator<index_t>{this}};
+  block_container blocks{default_allocator<Block>{this}};
   using index_iter_t = typename index_container::iterator;
   using index_const_iter_t = typename index_container::const_iterator;
   using block_iter_t = typename block_container::iterator;
@@ -207,20 +222,36 @@ protected:
   get_iter(const index_const_iter_t &it) const noexcept {
     return blocks.cbegin() + (it - indexes.cbegin());
   }
-  _inline block_iter_t get_iter(const index_iter_t &it) noexcept {
-    return blocks.begin() + (it - indexes.begin());
-  }
+  mutable index_const_iter_t last_used_index{indexes.cbegin()};
+  mutable block_const_iter_t last_used_block{blocks.cbegin()};
   inline std::pair<index_const_iter_t, block_const_iter_t>
   find_lower_bound(index_t target_index) const noexcept {
-    auto result =
-        std::lower_bound(indexes.cbegin(), indexes.cend(), target_index);
-    return {result, get_iter(result)};
+    if (empty())
+      return {indexes.cend(), blocks.cend()};
+    if (last_used_index >= indexes.cend()) {
+      last_used_index = indexes.cend() - 1;
+      last_used_block = blocks.cend() - 1;
+    }
+    if (*last_used_index == target_index)
+      return {last_used_index, last_used_block};
+    else {
+      index_const_iter_t idx_it =
+          (target_index > *last_used_index)
+              ? std::lower_bound(last_used_index + 1, indexes.cend(),
+                                 target_index)
+              : std::lower_bound(indexes.cbegin(), last_used_index,
+                                 target_index);
+      const auto blk_it = get_iter(idx_it);
+      last_used_index = idx_it;
+      last_used_block = blk_it;
+      return {last_used_index, last_used_block};
+    }
   }
   inline std::pair<index_iter_t, block_iter_t>
   find_lower_bound_mut(index_t target_index) noexcept {
-    auto result =
-        std::lower_bound(indexes.begin(), indexes.end(), target_index);
-    return {result, get_iter(result)};
+    const auto [idx_it, blk_it] = find_lower_bound(target_index);
+    return {indexes.begin() + (idx_it - indexes.cbegin()),
+            blocks.begin() + (blk_it - blocks.cbegin())};
   }
 
 public:
