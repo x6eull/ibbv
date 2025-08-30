@@ -89,4 +89,20 @@ TEST(ReferenceTest, DifferenceAsReset) {
   ASSERT_EQ(sorted_result, sorted_std_result);
   ASSERT_EQ(v1.count(), sorted_std_result.size());
 }
+
+TEST(ReferenceTest, Intersects) {
+  for (int i = 0; i < 10000; i++) {
+    IBBV v1, v2;
+    const auto b1 = random_dist(64, 128 * 10), b2 = random_dist(64, 128 * 10);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    std::vector<ele_idx> std_result;
+    std::set_intersection(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                          std::back_inserter(std_result));
+
+    ASSERT_EQ(v1.intersects(v2), !std_result.empty());
+  }
+}
 } // namespace ibbv::test
