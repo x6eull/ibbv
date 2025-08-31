@@ -890,9 +890,39 @@ public:
     return *begin();
   }
 
-  /// Construct empty vector
-  IndexedBlockBitVector() {}
-  DEFAULT_COPY_MOVE(IndexedBlockBitVector);
+  /// Construct empty vector. No bits are set.
+  constexpr IndexedBlockBitVector() noexcept {}
+  IndexedBlockBitVector(const IndexedBlockBitVector &other) noexcept {
+    indexes = other.indexes;
+    blocks = other.blocks;
+    last_used_index = indexes.cbegin();
+    last_used_block = blocks.cbegin();
+  }
+  IndexedBlockBitVector &
+  operator=(const IndexedBlockBitVector &other) noexcept {
+    if (this == &other)
+      return *this;
+    indexes = other.indexes;
+    blocks = other.blocks;
+    last_used_index = indexes.cbegin();
+    last_used_block = blocks.cbegin();
+    return *this;
+  }
+  IndexedBlockBitVector(IndexedBlockBitVector &&other) noexcept {
+    indexes = std::move(other.indexes);
+    blocks = std::move(other.blocks);
+    last_used_index = indexes.cbegin();
+    last_used_block = blocks.cbegin();
+  }
+  IndexedBlockBitVector &operator=(IndexedBlockBitVector &&other) noexcept {
+    if (this == &other)
+      return *this;
+    indexes = std::move(other.indexes);
+    blocks = std::move(other.blocks);
+    last_used_index = indexes.cbegin();
+    last_used_block = blocks.cbegin();
+    return *this;
+  }
 
   /// Returns true if no bits are set.
   bool empty() const noexcept { return indexes.empty(); }
