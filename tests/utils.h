@@ -17,7 +17,11 @@ constexpr inline unsigned short BlockSize = 128;
 using IBBV = ibbv::IndexedBlockBitVector<BlockSize>;
 using SBV = llvm::SparseBitVector<BlockSize>;
 
-static const auto global_seed = std::random_device{}();
+static const auto global_seed = []() {
+  const auto result = std::random_device{}();
+  std::cout << "random seed: " << result << std::endl;
+  return result;
+}();
 static inline std::mt19937 mix_seed(std::initializer_list<uint32_t> seeds) {
   auto s = global_seed;
   for (const auto t : seeds)
@@ -50,7 +54,6 @@ static inline common_rep stable_random_dist(ele_idx n, ele_idx max) {
 }
 static inline std::mt19937 shared_gen(global_seed);
 static inline std::set<ele_idx> random_dist(ele_idx n, ele_idx max) {
-  std::cout << "using random seed " << global_seed << std::endl;
   constexpr ele_idx min = 0;
   if (n <= 0)
     return std::set<ele_idx>{};

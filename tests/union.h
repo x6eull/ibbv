@@ -1,6 +1,6 @@
 #pragma once
-#include <benchmark/benchmark.h>
 #include "utils.h"
+#include <benchmark/benchmark.h>
 
 namespace ibbv::test {
 template <typename T> static void BM_union(benchmark::State &state) {
@@ -9,17 +9,16 @@ template <typename T> static void BM_union(benchmark::State &state) {
              num_ele = BlockSize * max_num_blocks * occupied_percent / 100;
   const auto rep = stable_random_dist(num_ele, max_ele_idx),
              rep_rhs = stable_random_dist(num_ele, max_ele_idx);
-  const auto bv_base = from_common<T>(rep),
-             bv_rhs = from_common<T>(rep_rhs);
+  const auto bv_base = from_common<T>(rep), bv_rhs = from_common<T>(rep_rhs);
   for (auto _ : state) {
     auto bv = bv_base;
     bv |= bv_rhs;
   }
+  state.SetItemsProcessed(state.iterations());
 }
 
 static const inline auto union_args = {
-    concat_vec({benchmark::CreateDenseRange(1, 15, 2),
-                benchmark::CreateRange(32, 6400, 8)}),
+    benchmark::CreateRange(1, 1 << 3 * 8, 8),
     benchmark::CreateDenseRange(10, 90, 20),
 };
 BENCHMARK(BM_union<IBBV>)->ArgsProduct(union_args);
