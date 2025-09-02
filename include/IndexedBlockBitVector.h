@@ -133,9 +133,9 @@ protected:
     };
 
     /// Removes default initialization behaviour.
-    template <class U> void construct(U *p) noexcept {}
+    template <class U> void construct(U *p) const noexcept {}
     /// No destruction behaviour.
-    template <class U> void destroy(U *p) noexcept {}
+    template <class U> void destroy(U *p) const noexcept {}
 
     [[nodiscard]] T *allocate(std::size_t n) {
       const auto nbytes = n * sizeof(T);
@@ -154,7 +154,7 @@ protected:
       return result;
     }
 
-    void deallocate(T *p, std::size_t n) noexcept {
+    void deallocate(T *p, std::size_t n) const noexcept {
       const auto nbytes = n * sizeof(T);
       if (nbytes >= Threshold)
         ::operator delete(p, std::align_val_t{Align});
@@ -938,7 +938,7 @@ public:
   /// Returns true if no bits are set.
   bool empty() const noexcept { return indexes.empty(); }
 
-  /// Returns the count of set bits.
+  /// Returns the count of bits set.
   uint32_t count() const noexcept {
     // TODO: improve
     if (size() == 0)
