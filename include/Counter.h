@@ -19,7 +19,7 @@ std::ostream& operator<<(std::ostream& stream, const std::tuple<T...>& t) {
 
 namespace ibbv::utils {
 template <typename... T> class Counter {
-  public:
+public:
   using key_t = std::tuple<T...>;
   void inc(const key_t& key) {
     const auto it = recMap.find(key);
@@ -35,7 +35,7 @@ template <typename... T> class Counter {
       std::cout << "[" << title << "] " << k << ": " << c << std::endl;
   }
 
-  protected:
+protected:
   std::string title;
   std::map<key_t, int> recMap;
 };

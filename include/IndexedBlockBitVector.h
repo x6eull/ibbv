@@ -39,7 +39,7 @@ template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
   static_assert(BlockSize == 128,
                 "BlockSize other than 128 is unsupported currently");
 
-  public:
+public:
   using UnitType = uint64_t;
   static constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
   static constexpr uint16_t UnitsPerBlock = BlockSize / UnitBits;
@@ -121,16 +121,16 @@ template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
 
   using index_t = int32_t;
 
-  protected:
+protected:
   template <typename T, size_t Align, size_t Threshold>
   class IbbvAllocator : public std::allocator<T> {
     static_assert(std::is_same_v<index_t, T> || std::is_same_v<Block, T>,
                   "Unsupported type");
 
-protected:
+  protected:
     IndexedBlockBitVector<>* ibbv;
 
-public:
+  public:
     IbbvAllocator(IndexedBlockBitVector<>* ibbv) : ibbv(ibbv) {}
     DEFAULT_COPY_MOVE(IbbvAllocator)
 
@@ -782,9 +782,9 @@ public:
   }
 
   // Public interfaces
-  public:
-  class IndexedBlockBitVectorIterator {
 public:
+  class IndexedBlockBitVectorIterator {
+  public:
     using iterator_category = std::input_iterator_tag;
     using value_type = index_t;
     using difference_type = std::ptrdiff_t;
@@ -792,7 +792,7 @@ public:
     using reference = const index_t&;
     index_t cur_pos;
 
-protected:
+  protected:
     index_const_iter_t indexIt;
     index_const_iter_t indexEnd;
     block_const_iter_t blockIt;
@@ -838,7 +838,7 @@ protected:
       search();
     }
 
-public:
+  public:
     IndexedBlockBitVectorIterator() = delete;
     IndexedBlockBitVectorIterator(const IndexedBlockBitVector& vec,
                                   bool end = false)
