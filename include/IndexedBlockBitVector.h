@@ -19,6 +19,9 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <utility>
 #include <vector>
 
+#if IBBV_COUNT_OP
+#include "Counter.h"
+#endif
 #include "SIMDHelper.h"
 
 #define DEFAULT_COPY_MOVE(T)                                                   \
@@ -274,6 +277,11 @@ protected:
 
   // SIMD algorithms.
   bool union_simd(const IndexedBlockBitVector &rhs) {
+#if IBBV_COUNT_OP
+    // this_count, this_size, rhs_count, rhs_size, result_count, result_size
+    static Counter<int, int, int, int, int, int> ctr{"union_simd"};
+    const auto this_count = count(), rhs_count = rhs.count();
+#endif
     // Update `this` inplace, save extra blocks to temp
     const auto this_size = size(), rhs_size = rhs.size();
     size_t lhs_i = 0, rhs_i = 0;
@@ -390,6 +398,9 @@ protected:
       std::memcpy(&blocks[this_size + extra_count], &rhs.blocks[rhs_i],
                   sizeof(Block) * (rhs_size - rhs_i));
     }
+#if IBBV_COUNT_OP
+    ctr.inc({this_count, this_size, rhs_count, rhs_size, count(), size()});
+#endif
     return changed;
   }
 
