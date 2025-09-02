@@ -20,15 +20,15 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <vector>
 
 #if IBBV_COUNT_OP
-#include "Counter.h"
+#  include "Counter.h"
 #endif
 #include "bit_utils.h"
 
 #define DEFAULT_COPY_MOVE(T)                                                   \
-  T(const T &) noexcept = default;                                             \
-  T &operator=(const T &) noexcept = default;                                  \
-  T(T &&) noexcept = default;                                                  \
-  T &operator=(T &&) noexcept = default;
+  T(const T&) noexcept = default;                                              \
+  T& operator=(const T&) noexcept = default;                                   \
+  T(T&&) noexcept = default;                                                   \
+  T& operator=(T&&) noexcept = default;
 
 namespace ibbv {
 using namespace ibbv::utils;
@@ -39,7 +39,7 @@ template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
   static_assert(BlockSize == 128,
                 "BlockSize other than 128 is unsupported currently");
 
-public:
+  public:
   using UnitType = uint64_t;
   static constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
   static constexpr uint16_t UnitsPerBlock = BlockSize / UnitBits;
@@ -50,12 +50,16 @@ public:
     /// Default constructor. data is uninitialized.
     Block() noexcept {}
     /// Initialize block with only one bit set.
-    Block(size_t index) noexcept : data{} { set(index); }
+    Block(size_t index) noexcept : data{} {
+      set(index);
+    }
 
     DEFAULT_COPY_MOVE(Block);
 
     /// Returns true if all bits are zero.
-    bool empty() const noexcept { return testz<BlockSize>(data); }
+    bool empty() const noexcept {
+      return testz<BlockSize>(data);
+    }
 
     bool test(size_t index) const noexcept {
       const size_t unit_index = index / UnitBits;
@@ -85,29 +89,31 @@ public:
       data[unit_index] &= ~(static_cast<UnitType>(1) << bit_index);
     }
 
-    bool contains(const Block &rhs) const noexcept {
+    bool contains(const Block& rhs) const noexcept {
       return ibbv::utils::contains<BlockSize>(data, rhs.data);
     }
 
-    bool intersects(const Block &rhs) const noexcept {
+    bool intersects(const Block& rhs) const noexcept {
       return ibbv::utils::intersects<BlockSize>(data, rhs.data);
     }
 
-    bool operator==(const Block &rhs) const noexcept {
+    bool operator==(const Block& rhs) const noexcept {
       return ibbv::utils::cmpeq<BlockSize>(data, rhs.data);
     }
 
-    bool operator!=(const Block &rhs) const noexcept { return !(*this == rhs); }
+    bool operator!=(const Block& rhs) const noexcept {
+      return !(*this == rhs);
+    }
 
-    bool operator|=(const Block &rhs) noexcept {
+    bool operator|=(const Block& rhs) noexcept {
       return ibbv::utils::or_inplace<BlockSize>(data, rhs.data);
     }
 
-    ibbv::utils::ComposedChangeResult operator&=(const Block &rhs) noexcept {
+    ibbv::utils::ComposedChangeResult operator&=(const Block& rhs) noexcept {
       return ibbv::utils::and_inplace<BlockSize>(data, rhs.data);
     }
 
-    ibbv::utils::ComposedChangeResult operator-=(const Block &rhs) noexcept {
+    ibbv::utils::ComposedChangeResult operator-=(const Block& rhs) noexcept {
       return ibbv::utils::diff_inplace<BlockSize>(data, rhs.data);
     }
   };
@@ -115,17 +121,17 @@ public:
 
   using index_t = int32_t;
 
-protected:
+  protected:
   template <typename T, size_t Align, size_t Threshold>
   class IbbvAllocator : public std::allocator<T> {
     static_assert(std::is_same_v<index_t, T> || std::is_same_v<Block, T>,
                   "Unsupported type");
 
-  protected:
-    IndexedBlockBitVector<> *ibbv;
+protected:
+    IndexedBlockBitVector<>* ibbv;
 
-  public:
-    IbbvAllocator(IndexedBlockBitVector<> *ibbv) : ibbv(ibbv) {}
+public:
+    IbbvAllocator(IndexedBlockBitVector<>* ibbv) : ibbv(ibbv) {}
     DEFAULT_COPY_MOVE(IbbvAllocator)
 
     template <class U> struct rebind {
@@ -133,18 +139,17 @@ protected:
     };
 
     /// Removes default initialization behaviour.
-    template <class U> void construct(U *p) const noexcept {}
+    template <class U> void construct(U* p) const noexcept {}
     /// No destruction behaviour.
-    template <class U> void destroy(U *p) const noexcept {}
+    template <class U> void destroy(U* p) const noexcept {}
 
-    [[nodiscard]] T *allocate(std::size_t n) {
+    [[nodiscard]] T* allocate(std::size_t n) {
       const auto nbytes = n * sizeof(T);
-      T *result;
+      T* result;
       if (nbytes >= Threshold)
-        result = reinterpret_cast<T *>(
+        result = reinterpret_cast<T*>(
             ::operator new(nbytes, std::align_val_t{Align}));
-      else
-        result = reinterpret_cast<T *>(::operator new(nbytes));
+      else result = reinterpret_cast<T*>(::operator new(nbytes));
       if constexpr (std::is_same_v<index_t, T>)
         ibbv->last_used_index = static_cast<index_const_iter_t>(
             result + (ibbv->last_used_index - ibbv->indexes.cbegin()));
@@ -154,12 +159,10 @@ protected:
       return result;
     }
 
-    void deallocate(T *p, std::size_t n) const noexcept {
+    void deallocate(T* p, std::size_t n) const noexcept {
       const auto nbytes = n * sizeof(T);
-      if (nbytes >= Threshold)
-        ::operator delete(p, std::align_val_t{Align});
-      else
-        ::operator delete(p);
+      if (nbytes >= Threshold) ::operator delete(p, std::align_val_t{Align});
+      else ::operator delete(p);
     }
   };
 
@@ -176,37 +179,44 @@ protected:
   using block_const_iter_t = typename block_container::const_iterator;
 
   /// Returns # of blocks.
-  _inline size_t size() const noexcept { return indexes.size(); }
-  _inline index_t index_at(size_t i) const noexcept { return indexes[i]; }
-  _inline Block &block_at(size_t i) noexcept { return blocks[i]; }
-  _inline const Block &block_at(size_t i) const noexcept { return blocks[i]; }
+  _inline size_t size() const noexcept {
+    return indexes.size();
+  }
+  _inline index_t index_at(size_t i) const noexcept {
+    return indexes[i];
+  }
+  _inline Block& block_at(size_t i) noexcept {
+    return blocks[i];
+  }
+  _inline const Block& block_at(size_t i) const noexcept {
+    return blocks[i];
+  }
   _inline void truncate(size_t keep_count) noexcept {
     indexes.resize(keep_count);
     blocks.resize(keep_count);
   }
   template <typename... Args>
-  _inline void emplace_at(const index_iter_t &index_iter,
-                          const block_iter_t &block_iter, const index_t &ind,
-                          Args &&...blkArgs) noexcept {
+  _inline void emplace_at(const index_iter_t& index_iter,
+                          const block_iter_t& block_iter, const index_t& ind,
+                          Args&&... blkArgs) noexcept {
     indexes.emplace(index_iter, ind);
     blocks.emplace(block_iter, std::forward<Args>(blkArgs)...);
   }
   template <typename... Args>
-  _inline void emplace_at(size_t i, const index_t &ind,
-                          Args &&...blkArgs) noexcept {
+  _inline void emplace_at(size_t i, const index_t& ind,
+                          Args&&... blkArgs) noexcept {
     return emplace_at(indexes.cbegin() + i, blocks.cbegin() + i, ind,
                       std::forward<Args>(blkArgs)...);
   }
-  _inline block_const_iter_t
-  get_block_iter(const index_const_iter_t &it) const noexcept {
+  _inline block_const_iter_t get_block_iter(
+      const index_const_iter_t& it) const noexcept {
     return blocks.cbegin() + (it - indexes.cbegin());
   }
   mutable index_const_iter_t last_used_index{indexes.cbegin()};
   mutable block_const_iter_t last_used_block{blocks.cbegin()};
-  inline std::pair<index_const_iter_t, block_const_iter_t>
-  find_lower_bound(index_t target_index) const noexcept {
-    if (empty())
-      return {indexes.cend(), blocks.cend()};
+  inline std::pair<index_const_iter_t, block_const_iter_t> find_lower_bound(
+      index_t target_index) const noexcept {
+    if (empty()) return {indexes.cend(), blocks.cend()};
     if (last_used_index >= indexes.cend()) {
       last_used_index = indexes.cend() - 1;
       last_used_block = blocks.cend() - 1;
@@ -226,8 +236,8 @@ protected:
       return {last_used_index, last_used_block};
     }
   }
-  inline std::pair<index_iter_t, block_iter_t>
-  find_lower_bound_mut(index_t target_index) noexcept {
+  inline std::pair<index_iter_t, block_iter_t> find_lower_bound_mut(
+      index_t target_index) noexcept {
     const auto [idx_it, blk_it] = find_lower_bound(target_index);
     return {indexes.begin() + (idx_it - indexes.cbegin()),
             blocks.begin() + (blk_it - blocks.cbegin())};
@@ -240,19 +250,19 @@ protected:
     (f(std::integral_constant<idx_type, indices>()), ...);
   }
   template <typename idx_type, idx_type... indices, typename Func>
-  static _inline bool
-  unroll_loop_and(std::integer_sequence<idx_type, indices...>, Func f) {
+  static _inline bool unroll_loop_and(
+      std::integer_sequence<idx_type, indices...>, Func f) {
     return (f(std::integral_constant<idx_type, indices>()) && ...);
   }
   template <typename idx_type, idx_type... indices, typename Func>
-  static _inline bool
-  unroll_loop_or(std::integer_sequence<idx_type, indices...>, Func f) {
+  static _inline bool unroll_loop_or(
+      std::integer_sequence<idx_type, indices...>, Func f) {
     return (f(std::integral_constant<idx_type, indices>()) || ...);
   }
-  static _inline std::pair<uint8_t, uint8_t>
-  adv_count(const IndexedBlockBitVector<> &lhs,
-            const IndexedBlockBitVector<> &rhs, const __m512i &lhs_idx,
-            const __m512i &rhs_idx, const size_t lhs_i, const size_t rhs_i) {
+  static _inline std::pair<uint8_t, uint8_t> adv_count(
+      const IndexedBlockBitVector<>& lhs, const IndexedBlockBitVector<>& rhs,
+      const __m512i& lhs_idx, const __m512i& rhs_idx, const size_t lhs_i,
+      const size_t rhs_i) {
     /**the maximum index in current range [lhs_i..=lhs_i + 15], spread to \
      * vector register */
     const auto rangemax_lhs = _mm512_set1_epi32(lhs.index_at(lhs_i + 15)),
@@ -276,7 +286,7 @@ protected:
       13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 
   // SIMD algorithms.
-  bool union_simd(const IndexedBlockBitVector &rhs) {
+  bool union_simd(const IndexedBlockBitVector& rhs) {
 #if IBBV_COUNT_OP
     // this_count, this_size, rhs_count, rhs_size, result_count, result_size
     static Counter<int, int, int, int, int, int> ctr{"union_simd"};
@@ -287,8 +297,8 @@ protected:
     size_t lhs_i = 0, rhs_i = 0;
     bool changed = false;
     size_t extra_count = 0;
-    index_t *extra_indexes = (index_t *)std::malloc(sizeof(index_t) * rhs_size);
-    Block *extra_blocks = (Block *)std::malloc(sizeof(Block) * rhs_size);
+    index_t* extra_indexes = (index_t*)std::malloc(sizeof(index_t) * rhs_size);
+    Block* extra_blocks = (Block*)std::malloc(sizeof(Block) * rhs_size);
 
     alignas(64) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
     while (lhs_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
@@ -303,9 +313,9 @@ protected:
           adv_count(*this, rhs, v_lhs_idx, v_rhs_idx, lhs_i, rhs_i);
 
       auto match_this_temp = match_this;
-      Block *store_blk_base = rhs_block_temp;
+      Block* store_blk_base = rhs_block_temp;
       for (auto i = 0; i < advance_rhs; ++i) {
-        const auto &rhs_block_cur = rhs.block_at(rhs_i + i);
+        const auto& rhs_block_cur = rhs.block_at(rhs_i + i);
         if (match_rhs & (1 << i)) { // check bits[i]
           // copy current rhs block into right pos
           const auto this_pad = ibbv::utils::tzcnt(match_this_temp);
@@ -344,8 +354,7 @@ protected:
     while (lhs_i < this_size && rhs_i < rhs_size) {
       const auto lhs_ind = index_at(lhs_i);
       const auto rhs_ind = rhs.index_at(rhs_i);
-      if (lhs_ind < rhs_ind)
-        ++lhs_i;
+      if (lhs_ind < rhs_ind) ++lhs_i;
       else if (lhs_ind > rhs_ind) {
         // copy current rhs block to temp
         extra_indexes[extra_count] = rhs_ind;
@@ -404,7 +413,7 @@ protected:
     return changed;
   }
 
-  bool intersect_simd(const IndexedBlockBitVector &rhs) {
+  bool intersect_simd(const IndexedBlockBitVector& rhs) {
     const auto this_size = size(), rhs_size = rhs.size();
     size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
     bool changed = false;
@@ -492,8 +501,7 @@ protected:
         // ignore this block (not copied to valid position)
         ++lhs_i;
         changed = true;
-      } else if (lhs_ind > rhs_ind)
-        ++rhs_i;
+      } else if (lhs_ind > rhs_ind) ++rhs_i;
       else { // lhs_ind == rhs_ind
         const auto vcur_this = avx_vec<BlockSize>::load(block_at(lhs_i).data),
                    vcur_rhs =
@@ -519,7 +527,7 @@ protected:
     return changed;
   }
 
-  bool diff_simd(const IndexedBlockBitVector &rhs) {
+  bool diff_simd(const IndexedBlockBitVector& rhs) {
     const auto this_size = size(), rhs_size = rhs.size();
     size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
     bool changed = false;
@@ -602,8 +610,7 @@ protected:
         block_at(valid_count) = block_at(lhs_i);
         ++lhs_i;
         ++valid_count;
-      } else if (lhs_ind > rhs_ind)
-        ++rhs_i;
+      } else if (lhs_ind > rhs_ind) ++rhs_i;
       else { // compute ANDNOT
         const auto v_this = avx_vec<BlockSize>::load(&block_at(lhs_i));
         const auto v_rhs = avx_vec<BlockSize>::load(&rhs.block_at(rhs_i));
@@ -632,10 +639,9 @@ protected:
     return changed;
   }
 
-  bool contains_simd(const IndexedBlockBitVector &rhs) const noexcept {
+  bool contains_simd(const IndexedBlockBitVector& rhs) const noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
-    if (this_size < rhs_size)
-      return false;
+    if (this_size < rhs_size) return false;
 
     size_t lhs_i = 0, rhs_i = 0;
     const auto all_zero = _mm512_setzero_si512();
@@ -653,8 +659,7 @@ protected:
       /// count of matched indexes
       const auto n_matched = ibbv::utils::popcnt((uint32_t)match_this);
 
-      if (advance_rhs > n_matched)
-        return false;
+      if (advance_rhs > n_matched) return false;
 
       /// compress the intersected data's offset(/8bytes).
       const auto gather_this_offset_u16x32 =
@@ -688,31 +693,26 @@ protected:
             const auto and_result =
                 _mm512_and_epi64(intersect_this, intersect_rhs);
 
-            if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs))
-              return false;
+            if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs)) return false;
             return true;
           });
-      if (!cur_result)
-        return false;
+      if (!cur_result) return false;
       lhs_i += advance_lhs, rhs_i += advance_rhs;
     }
     while (lhs_i < size() && rhs_i < rhs.size()) {
       const auto lhs_ind = index_at(lhs_i);
       const auto rhs_ind = rhs.index_at(rhs_i);
-      if (lhs_ind > rhs_ind)
-        return false;
-      if (lhs_ind < rhs_ind)
-        ++lhs_i;
+      if (lhs_ind > rhs_ind) return false;
+      if (lhs_ind < rhs_ind) ++lhs_i;
       else {
-        if (!block_at(lhs_i).contains(rhs.block_at(rhs_i)))
-          return false;
+        if (!block_at(lhs_i).contains(rhs.block_at(rhs_i))) return false;
         ++lhs_i, ++rhs_i;
       }
     }
     return rhs_i == rhs.size();
   }
 
-  bool intersects_simd(const IndexedBlockBitVector &rhs) const noexcept {
+  bool intersects_simd(const IndexedBlockBitVector& rhs) const noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
     size_t lhs_i = 0, rhs_i = 0;
     const auto all_zero = _mm512_setzero_si512();
@@ -765,20 +765,16 @@ protected:
             // not zero => share any bits in common => return true
             return !avx_vec<512>::is_zero(and_result);
           });
-      if (cur_result)
-        return true;
+      if (cur_result) return true;
       lhs_i += advance_lhs, rhs_i += advance_rhs;
     }
     while (lhs_i < size() && rhs_i < rhs.size()) {
       const auto lhs_ind = index_at(lhs_i);
       const auto rhs_ind = rhs.index_at(rhs_i);
-      if (lhs_ind > rhs_ind)
-        ++rhs_i;
-      if (lhs_ind < rhs_ind)
-        ++lhs_i;
+      if (lhs_ind > rhs_ind) ++rhs_i;
+      if (lhs_ind < rhs_ind) ++lhs_i;
       else {
-        if (block_at(lhs_i).intersects(rhs.block_at(rhs_i)))
-          return true;
+        if (block_at(lhs_i).intersects(rhs.block_at(rhs_i))) return true;
         ++lhs_i, ++rhs_i;
       }
     }
@@ -786,17 +782,17 @@ protected:
   }
 
   // Public interfaces
-public:
-  class IndexedBlockBitVectorIterator {
   public:
+  class IndexedBlockBitVectorIterator {
+public:
     using iterator_category = std::input_iterator_tag;
     using value_type = index_t;
     using difference_type = std::ptrdiff_t;
-    using pointer = const index_t *;
-    using reference = const index_t &;
+    using pointer = const index_t*;
+    using reference = const index_t&;
     index_t cur_pos;
 
-  protected:
+protected:
     index_const_iter_t indexIt;
     index_const_iter_t indexEnd;
     block_const_iter_t blockIt;
@@ -842,14 +838,13 @@ public:
       search();
     }
 
-  public:
+public:
     IndexedBlockBitVectorIterator() = delete;
-    IndexedBlockBitVectorIterator(const IndexedBlockBitVector &vec,
+    IndexedBlockBitVectorIterator(const IndexedBlockBitVector& vec,
                                   bool end = false)
         : // must be init to identify raw vector
           indexEnd(vec.indexes.cend()), end(end | vec.empty()) {
-      if (end)
-        return;
+      if (end) return;
       indexIt = vec.indexes.cbegin();
       blockIt = vec.blocks.cbegin();
       unit_index = 0;
@@ -858,9 +853,13 @@ public:
     }
     DEFAULT_COPY_MOVE(IndexedBlockBitVectorIterator);
 
-    reference operator*() const { return cur_pos; }
-    pointer operator->() const { return &cur_pos; }
-    IndexedBlockBitVectorIterator &operator++() {
+    reference operator*() const {
+      return cur_pos;
+    }
+    pointer operator->() const {
+      return &cur_pos;
+    }
+    IndexedBlockBitVectorIterator& operator++() {
       forward();
       return *this;
     }
@@ -869,7 +868,7 @@ public:
       ++*this;
       return temp;
     }
-    bool operator==(const IndexedBlockBitVectorIterator &other) const {
+    bool operator==(const IndexedBlockBitVectorIterator& other) const {
       return
           // created from the same vector, and
           indexEnd == other.indexEnd &&
@@ -878,7 +877,7 @@ public:
            ( // both not ended and pointing to the same position
                end == other.end && cur_pos == other.cur_pos));
     }
-    bool operator!=(const IndexedBlockBitVectorIterator &other) const {
+    bool operator!=(const IndexedBlockBitVectorIterator& other) const {
       return !(*this == other);
     }
   };
@@ -896,38 +895,35 @@ public:
 
   /// Return the first set bit in the bitmap.  Return -1 if no bits are set.
   index_t find_first() const {
-    if (empty())
-      return -1;
+    if (empty()) return -1;
     return *begin();
   }
 
   /// Construct empty vector. No bits are set.
   constexpr IndexedBlockBitVector() noexcept {}
-  IndexedBlockBitVector(const IndexedBlockBitVector &other) noexcept {
+  IndexedBlockBitVector(const IndexedBlockBitVector& other) noexcept {
     indexes = other.indexes;
     blocks = other.blocks;
     last_used_index = indexes.cbegin();
     last_used_block = blocks.cbegin();
   }
-  IndexedBlockBitVector &
-  operator=(const IndexedBlockBitVector &other) noexcept {
-    if (this == &other)
-      return *this;
+  IndexedBlockBitVector& operator=(
+      const IndexedBlockBitVector& other) noexcept {
+    if (this == &other) return *this;
     indexes = other.indexes;
     blocks = other.blocks;
     last_used_index = indexes.cbegin();
     last_used_block = blocks.cbegin();
     return *this;
   }
-  IndexedBlockBitVector(IndexedBlockBitVector &&other) noexcept {
+  IndexedBlockBitVector(IndexedBlockBitVector&& other) noexcept {
     indexes = std::move(other.indexes);
     blocks = std::move(other.blocks);
     last_used_index = indexes.cbegin();
     last_used_block = blocks.cbegin();
   }
-  IndexedBlockBitVector &operator=(IndexedBlockBitVector &&other) noexcept {
-    if (this == &other)
-      return *this;
+  IndexedBlockBitVector& operator=(IndexedBlockBitVector&& other) noexcept {
+    if (this == &other) return *this;
     indexes = std::move(other.indexes);
     blocks = std::move(other.blocks);
     last_used_index = indexes.cbegin();
@@ -936,13 +932,14 @@ public:
   }
 
   /// Returns true if no bits are set.
-  bool empty() const noexcept { return indexes.empty(); }
+  bool empty() const noexcept {
+    return indexes.empty();
+  }
 
   /// Returns the count of bits set.
   uint32_t count() const noexcept {
     // TODO: improve
-    if (size() == 0)
-      return 0;
+    if (size() == 0) return 0;
 
 #if __AVX512VPOPCNTDQ__ && __AVX512VL__
     auto it = blocks.begin();
@@ -957,7 +954,7 @@ public:
     return avx_vec<BlockSize>::reduce_add(c);
 #else
     uint32_t result = 0;
-    auto arr = reinterpret_cast<const uint32_t *>(this->blocks.data());
+    auto arr = reinterpret_cast<const uint32_t*>(this->blocks.data());
     for (size_t i = 0; i < size() * (sizeof(Block) / 8); ++i, ++arr)
       result += ibbv::utils::popcnt(*arr);
     return result;
@@ -976,8 +973,7 @@ public:
     const auto [index_iter, block_iter] = find_lower_bound(target_ind);
     if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
       return false;
-    else
-      return block_iter->test(n % BlockSize);
+    else return block_iter->test(n % BlockSize);
   }
 
   /// Set bit `n` (zero-based).
@@ -986,8 +982,7 @@ public:
     const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
     if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
       emplace_at(index_iter, block_iter, target_ind, n % BlockSize);
-    else
-      return block_iter->set(n % BlockSize);
+    else return block_iter->set(n % BlockSize);
   }
 
   /// Check if bit `n` is set. If it is, returns false.
@@ -999,8 +994,7 @@ public:
         *index_iter != target_ind) { // not found
       emplace_at(index_iter, block_iter, target_ind, n % BlockSize);
       return true;
-    } else
-      return block_iter->test_and_set(n % BlockSize);
+    } else return block_iter->test_and_set(n % BlockSize);
   }
 
   /// Unset bit `n`.
@@ -1009,7 +1003,7 @@ public:
     const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
     if (index_iter == indexes.cend() || *index_iter != target_ind)
       return; // not found
-    auto &d = *block_iter;
+    auto& d = *block_iter;
     d.reset(n % BlockSize);
     if (d.empty()) {
       indexes.erase(index_iter);
@@ -1018,33 +1012,34 @@ public:
   }
 
   /// Returns true if `this` contains all bits of rhs.
-  bool contains(const IndexedBlockBitVector &rhs) const noexcept {
+  bool contains(const IndexedBlockBitVector& rhs) const noexcept {
     return contains_simd(rhs);
   }
 
   /// Returns true if `this` contains some bits of rhs.
-  bool intersects(const IndexedBlockBitVector &rhs) const noexcept {
+  bool intersects(const IndexedBlockBitVector& rhs) const noexcept {
     return intersects_simd(rhs);
   }
 
-  bool operator==(const IndexedBlockBitVector &rhs) const noexcept {
-    if (size() != rhs.size())
-      return false;
+  bool operator==(const IndexedBlockBitVector& rhs) const noexcept {
+    if (size() != rhs.size()) return false;
     return std::memcmp(indexes.data(), rhs.indexes.data(),
                        sizeof(index_t) * size()) == 0 &&
            std::memcmp(blocks.data(), rhs.blocks.data(),
                        sizeof(Block) * size()) == 0;
   }
 
-  bool operator!=(const IndexedBlockBitVector &rhs) const noexcept {
+  bool operator!=(const IndexedBlockBitVector& rhs) const noexcept {
     return !(*this == rhs);
   }
 
   /// Inplace union with rhs.
   /// Returns true if `this` changed.
-  bool operator|=(const IndexedBlockBitVector &rhs) { return union_simd(rhs); }
+  bool operator|=(const IndexedBlockBitVector& rhs) {
+    return union_simd(rhs);
+  }
 
-  IndexedBlockBitVector operator|(const IndexedBlockBitVector &rhs) const {
+  IndexedBlockBitVector operator|(const IndexedBlockBitVector& rhs) const {
     IndexedBlockBitVector copy(*this);
     copy |= rhs;
     return copy;
@@ -1052,20 +1047,22 @@ public:
 
   /// Inplace intersection with rhs.
   /// Returns true if `this` changed.
-  bool operator&=(const IndexedBlockBitVector &rhs) noexcept {
+  bool operator&=(const IndexedBlockBitVector& rhs) noexcept {
     return intersect_simd(rhs);
   }
 
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
-  bool operator-=(const IndexedBlockBitVector &rhs) { return diff_simd(rhs); }
+  bool operator-=(const IndexedBlockBitVector& rhs) {
+    return diff_simd(rhs);
+  }
   /// Same as `operator-=(rhs)`
-  bool intersectWithComplement(const IndexedBlockBitVector &rhs) {
+  bool intersectWithComplement(const IndexedBlockBitVector& rhs) {
     return *this -= rhs;
   }
   /// Compute lhs - rhs, store the result into `this`.
-  void intersectWithComplement(const IndexedBlockBitVector &lhs,
-                               const IndexedBlockBitVector &rhs) {
+  void intersectWithComplement(const IndexedBlockBitVector& lhs,
+                               const IndexedBlockBitVector& rhs) {
     // TODO: inefficient!
     *this = lhs;
     intersectWithComplement(rhs);
@@ -1077,7 +1074,7 @@ public:
 
 namespace std {
 template <> struct hash<ibbv::IndexedBlockBitVector<>> {
-  std::size_t operator()(const ibbv::IndexedBlockBitVector<> &s) const {
+  std::size_t operator()(const ibbv::IndexedBlockBitVector<>& s) const {
     return ibbv::IndexedBlockBitVector<>::szudzik(
         s.count(),
         ibbv::IndexedBlockBitVector<>::szudzik(s.size(), s.find_first()));

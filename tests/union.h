@@ -3,7 +3,7 @@
 #include <benchmark/benchmark.h>
 
 namespace ibbv::test {
-template <typename T> static void BM_union(benchmark::State &state) {
+template <typename T> static void BM_union(benchmark::State& state) {
   const auto max_num_blocks = state.range(0), occupied_percent = state.range(1);
   const auto max_ele_idx = BlockSize * max_num_blocks - 1,
              num_ele = BlockSize * max_num_blocks * occupied_percent / 100;

@@ -3,7 +3,7 @@
 #include "utils.h"
 
 namespace ibbv::test {
-template <typename T> static void BM_set_seq(benchmark::State &state) {
+template <typename T> static void BM_set_seq(benchmark::State& state) {
   const auto max_num_blocks = state.range(0), ele_per_block = state.range(1);
   for (auto _ : state) {
     T vec{};
@@ -20,7 +20,7 @@ static const inline auto set_seq_args = {
 BENCHMARK(BM_set_seq<IBBV>)->ArgsProduct(set_seq_args);
 BENCHMARK(BM_set_seq<SBV>)->ArgsProduct(set_seq_args);
 
-template <typename T> static void BM_set_random(benchmark::State &state) {
+template <typename T> static void BM_set_random(benchmark::State& state) {
   const auto max_num_blocks = state.range(0), occupied_percent = state.range(1);
   const auto max_ele_idx = BlockSize * max_num_blocks - 1,
              num_ele = BlockSize * max_num_blocks * occupied_percent / 100;

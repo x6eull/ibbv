@@ -30,8 +30,8 @@ _inline uint32_t duplicate_bits(uint16_t from) {
 /// _mm512_2intersect_epi64 with emuated support.
 /// Elements out of bounds are treated as maximum 64-bit integers.
 /// "ne" means native or emulated. Requires AVX512F.
-_inline void ne_mm512_2intersect_epi32(const __m512i &a, const __m512i &b,
-                                       __mmask16 &k1, __mmask16 &k2) {
+_inline void ne_mm512_2intersect_epi32(const __m512i& a, const __m512i& b,
+                                       __mmask16& k1, __mmask16& k2) {
 #if __AVX512VP2INTERSECT__
   _mm512_2intersect_epi32(a, b, &k1, &k2);
 #else // From https://arxiv.org/abs/2112.06342
@@ -80,106 +80,112 @@ template <unsigned short BitWidth> struct avx_vec {
 };
 template <> struct avx_vec<512> {
   using data_t = __m512i;
-  static _inline auto load(const void *addr) {
+  static _inline auto load(const void* addr) {
     return _mm512_loadu_si512(addr);
   }
-  static _inline void store(void *addr, const data_t &v) {
+  static _inline void store(void* addr, const data_t& v) {
     _mm512_storeu_si512(addr, v);
   }
-  static _inline bool is_zero(const data_t &v) {
+  static _inline bool is_zero(const data_t& v) {
     return _mm512_test_epi64_mask(v, v) == 0;
   }
   /// count logical 1 bits in packed 64-bit integers
-  static _inline auto popcnt(const data_t &v) { return _mm512_popcnt_epi64(v); }
-  static _inline auto or_op(const data_t &a, const data_t &b) {
+  static _inline auto popcnt(const data_t& v) {
+    return _mm512_popcnt_epi64(v);
+  }
+  static _inline auto or_op(const data_t& a, const data_t& b) {
     return _mm512_or_si512(a, b);
   }
-  static _inline auto and_op(const data_t &a, const data_t &b) {
+  static _inline auto and_op(const data_t& a, const data_t& b) {
     return _mm512_and_si512(a, b);
   }
   /// returns a & ~b
-  static _inline auto andnot_op(const data_t &a, const data_t &b) {
+  static _inline auto andnot_op(const data_t& a, const data_t& b) {
     // Intel® Intrinsics Guide:
     // Compute the bitwise NOT of 512 bits (representing integer data) in a
     // and then AND with b, and store the result in dst.
     return _mm512_andnot_si512(b, a);
   }
-  static _inline auto add_op(const data_t &a, const data_t &b) {
+  static _inline auto add_op(const data_t& a, const data_t& b) {
     return _mm512_add_epi64(a, b);
   }
-  static _inline long long int reduce_add(const data_t &v) {
+  static _inline long long int reduce_add(const data_t& v) {
     return _mm512_reduce_add_epi64(v);
   }
-  static _inline bool eq_cmp(const data_t &a, const data_t &b) {
+  static _inline bool eq_cmp(const data_t& a, const data_t& b) {
     return _mm512_cmpeq_epi64_mask(a, b) == 0xff;
   }
 };
 template <> struct avx_vec<256> {
   using data_t = __m256i;
-  static _inline auto load(const void *addr) {
-    return _mm256_loadu_si256(reinterpret_cast<const __m256i *>(addr));
+  static _inline auto load(const void* addr) {
+    return _mm256_loadu_si256(reinterpret_cast<const __m256i*>(addr));
   }
-  static _inline void store(void *addr, const data_t &v) {
-    _mm256_storeu_si256(reinterpret_cast<__m256i *>(addr), v);
+  static _inline void store(void* addr, const data_t& v) {
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(addr), v);
   }
-  static _inline bool is_zero(const data_t &v) {
+  static _inline bool is_zero(const data_t& v) {
     return _mm256_testz_si256(v, v) == 1;
   }
-  static _inline auto popcnt(const data_t &v) { return _mm256_popcnt_epi64(v); }
-  static _inline auto or_op(const data_t &a, const data_t &b) {
+  static _inline auto popcnt(const data_t& v) {
+    return _mm256_popcnt_epi64(v);
+  }
+  static _inline auto or_op(const data_t& a, const data_t& b) {
     return _mm256_or_si256(a, b);
   }
-  static _inline auto and_op(const data_t &a, const data_t &b) {
+  static _inline auto and_op(const data_t& a, const data_t& b) {
     return _mm256_and_si256(a, b);
   }
-  static _inline auto andnot_op(const data_t &a, const data_t &b) {
+  static _inline auto andnot_op(const data_t& a, const data_t& b) {
     return _mm256_andnot_si256(b, a);
   }
-  static _inline auto add_op(const data_t &a, const data_t &b) {
+  static _inline auto add_op(const data_t& a, const data_t& b) {
     return _mm256_add_epi64(a, b);
   }
-  static _inline long long int reduce_add(const data_t &v) {
+  static _inline long long int reduce_add(const data_t& v) {
     return _mm256_extract_epi64(v, 0) + _mm256_extract_epi64(v, 1) +
            _mm256_extract_epi64(v, 2) + _mm256_extract_epi64(v, 3);
   }
-  static _inline bool eq_cmp(const data_t &a, const data_t &b) {
+  static _inline bool eq_cmp(const data_t& a, const data_t& b) {
     return _mm256_cmpeq_epi64_mask(a, b) == 0xf;
   }
 };
 template <> struct avx_vec<128> {
   using data_t = __m128i;
-  static _inline auto load(const void *addr) {
-    return _mm_loadu_si128(reinterpret_cast<const __m128i *>(addr));
+  static _inline auto load(const void* addr) {
+    return _mm_loadu_si128(reinterpret_cast<const __m128i*>(addr));
   }
-  static _inline void store(void *addr, const data_t &v) {
-    _mm_storeu_si128(reinterpret_cast<__m128i *>(addr), v);
+  static _inline void store(void* addr, const data_t& v) {
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(addr), v);
   }
-  static _inline bool is_zero(const data_t &v) {
+  static _inline bool is_zero(const data_t& v) {
     return _mm_testz_si128(v, v) == 1;
   }
-  static _inline auto popcnt(const data_t &v) { return _mm_popcnt_epi64(v); }
-  static _inline auto or_op(const data_t &a, const data_t &b) {
+  static _inline auto popcnt(const data_t& v) {
+    return _mm_popcnt_epi64(v);
+  }
+  static _inline auto or_op(const data_t& a, const data_t& b) {
     return _mm_or_si128(a, b);
   }
-  static _inline auto and_op(const data_t &a, const data_t &b) {
+  static _inline auto and_op(const data_t& a, const data_t& b) {
     return _mm_and_si128(a, b);
   }
-  static _inline auto andnot_op(const data_t &a, const data_t &b) {
+  static _inline auto andnot_op(const data_t& a, const data_t& b) {
     return _mm_andnot_si128(b, a);
   }
-  static _inline auto add_op(const data_t &a, const data_t &b) {
+  static _inline auto add_op(const data_t& a, const data_t& b) {
     return _mm_add_epi64(a, b);
   }
-  static _inline uint64_t reduce_add(const data_t &v) {
+  static _inline uint64_t reduce_add(const data_t& v) {
     return _mm_extract_epi64(v, 0) + _mm_extract_epi64(v, 1);
   }
-  static _inline bool eq_cmp(const data_t &a, const data_t &b) {
+  static _inline bool eq_cmp(const data_t& a, const data_t& b) {
     return _mm_cmpeq_epi64_mask(a, b) == 0x3;
   }
 };
 
 /// Returns true if all bits are zero.
-template <unsigned short BitWidth> _inline bool testz(const void *addr) {
+template <unsigned short BitWidth> _inline bool testz(const void* addr) {
   const auto v = avx_vec<BitWidth>::load(addr);
   return avx_vec<BitWidth>::is_zero(v);
 }
@@ -187,7 +193,9 @@ template <unsigned short BitWidth> _inline bool testz(const void *addr) {
 #define UNSUPPORTED_TYPE STATIC_ASSERT_FAIL("Unsupported type");
 // the following functions return `int` as well as header <bit>
 // TODO: use bit manipulation functions from std (C++20)
-template <typename T> _inline int popcnt(T value) { UNSUPPORTED_TYPE }
+template <typename T> _inline int popcnt(T value) {
+  UNSUPPORTED_TYPE
+}
 template <> _inline int popcnt<uint32_t>(uint32_t value) {
   return _mm_popcnt_u32(value);
 }
@@ -195,7 +203,9 @@ template <> _inline int popcnt<uint64_t>(uint64_t value) {
   return _mm_popcnt_u64(value);
 }
 
-template <typename T> _inline int lzcnt(T value) { UNSUPPORTED_TYPE }
+template <typename T> _inline int lzcnt(T value) {
+  UNSUPPORTED_TYPE
+}
 template <> _inline int lzcnt<uint16_t>(uint16_t value) {
   return _lzcnt_u32(value) - 16;
 }
@@ -203,7 +213,9 @@ template <> _inline int lzcnt<uint64_t>(uint64_t value) {
   return _lzcnt_u64(value);
 }
 
-template <typename T> _inline int tzcnt(T value) { UNSUPPORTED_TYPE }
+template <typename T> _inline int tzcnt(T value) {
+  UNSUPPORTED_TYPE
+}
 template <> _inline int tzcnt<uint16_t>(uint16_t value) {
   return _tzcnt_u32(value);
 }
@@ -213,7 +225,7 @@ template <> _inline int tzcnt<uint64_t>(uint64_t value) {
 
 /// Returns true if all bits in v2 are set in v1. (that is, v1 contains v2)
 template <unsigned short BitWidth>
-_inline bool contains(const void *addr1, const void *addr2) {
+_inline bool contains(const void* addr1, const void* addr2) {
   const auto v1 = avx_vec<BitWidth>::load(addr1);
   const auto v2 = avx_vec<BitWidth>::load(addr2);
   const auto and_result = avx_vec<BitWidth>::and_op(v1, v2);
@@ -222,7 +234,7 @@ _inline bool contains(const void *addr1, const void *addr2) {
 
 /// Returns true if v1 and v2 share any bits.
 template <unsigned short BitWidth>
-_inline bool intersects(const void *addr1, const void *addr2) {
+_inline bool intersects(const void* addr1, const void* addr2) {
   const auto v1 = avx_vec<BitWidth>::load(addr1);
   const auto v2 = avx_vec<BitWidth>::load(addr2);
   const auto and_result = avx_vec<BitWidth>::and_op(v1, v2);
@@ -230,7 +242,7 @@ _inline bool intersects(const void *addr1, const void *addr2) {
 }
 
 template <unsigned short BitWidth>
-_inline bool cmpeq(const void *addr1, const void *addr2) {
+_inline bool cmpeq(const void* addr1, const void* addr2) {
   const auto v1 = avx_vec<BitWidth>::load(addr1);
   const auto v2 = avx_vec<BitWidth>::load(addr2);
   return avx_vec<BitWidth>::eq_cmp(v1, v2);
@@ -240,7 +252,7 @@ _inline bool cmpeq(const void *addr1, const void *addr2) {
 /// stores the result in addr1.
 /// Returns true if any bit in addr1 was changed.
 template <unsigned short BitWidth>
-_inline bool or_inplace(void *addr1, const void *addr2) {
+_inline bool or_inplace(void* addr1, const void* addr2) {
   const auto v1 = avx_vec<BitWidth>::load(addr1);
   const auto v2 = avx_vec<BitWidth>::load(addr2);
   const auto or_result = avx_vec<BitWidth>::or_op(v1, v2);
@@ -267,7 +279,7 @@ struct ComposedChangeResult {
 /// Returns whether any bit in addr1 was changed and whether it was zeroed.
 /// v1 and v2 are suppoesed to be both non-zero.
 template <unsigned short BitWidth>
-_inline ComposedChangeResult and_inplace(void *addr1, const void *addr2) {
+_inline ComposedChangeResult and_inplace(void* addr1, const void* addr2) {
   const auto v1 = avx_vec<BitWidth>::load(addr1);
   const auto v2 = avx_vec<BitWidth>::load(addr2);
   const auto and_result = avx_vec<BitWidth>::and_op(v1, v2);
@@ -280,7 +292,7 @@ _inline ComposedChangeResult and_inplace(void *addr1, const void *addr2) {
 }
 
 template <unsigned short BitWidth>
-_inline ComposedChangeResult diff_inplace(void *addr1, const void *addr2) {
+_inline ComposedChangeResult diff_inplace(void* addr1, const void* addr2) {
   const auto v1 = avx_vec<BitWidth>::load(addr1);
   const auto v2 = avx_vec<BitWidth>::load(addr2);
   const auto andnot_result = avx_vec<BitWidth>::andnot_op(v1, v2);

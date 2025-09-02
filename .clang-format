@@ -1,0 +1,9 @@
+BasedOnStyle: Microsoft
+PointerAlignment: Left
+IndentPPDirectives: AfterHash
+AllowShortFunctionsOnASingleLine: Empty
+ColumnLimit: 80
+AccessModifierOffset: -4
+IndentWidth: 2
+BreakBeforeBraces: Attach
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse

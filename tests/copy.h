@@ -1,9 +1,9 @@
 #pragma once
-#include <benchmark/benchmark.h>
 #include "utils.h"
+#include <benchmark/benchmark.h>
 
 namespace ibbv::test {
-template <typename T> static void BM_copy(benchmark::State &state) {
+template <typename T> static void BM_copy(benchmark::State& state) {
   const auto num_blocks = state.range(0), ele_per_block = state.range(1);
   T bv_base{};
   for (int i = 0; i < num_blocks; i++)
