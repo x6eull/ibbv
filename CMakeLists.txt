@@ -8,9 +8,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(ibbv INTERFACE 
   ${CMAKE_CURRENT_LIST_DIR}/include/IndexedBlockBitVector.h
-  ${CMAKE_CURRENT_LIST_DIR}/include/SIMDHelper.h
+  ${CMAKE_CURRENT_LIST_DIR}/include/bit_utils.h
+  ${CMAKE_CURRENT_LIST_DIR}/include/Counter.h
 )
 set_target_properties(ibbv PROPERTIES LINKER_LANGUAGE CXX)
+# target_compile_definitions(ibbv INTERFACE IBBV_COUNT_OP=1)
 target_compile_options(ibbv INTERFACE -march=native)
 target_include_directories(ibbv INTERFACE
   $<INSTALL_INTERFACE:include>

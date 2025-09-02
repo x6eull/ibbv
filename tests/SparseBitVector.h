@@ -20,7 +20,7 @@
 
 #define llvm_unreachable(msg) __builtin_unreachable()
 
-#include "SIMDHelper.h"
+#include "bit_utils.h"
 #include <cassert>
 #include <climits>
 #include <cstring>

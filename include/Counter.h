@@ -5,7 +5,7 @@
 #include <utility>
 
 template <typename... T>
-std::ostream &operator<<(std::ostream &stream, std::tuple<T...> &t) {
+std::ostream &operator<<(std::ostream &stream, const std::tuple<T...> &t) {
   stream << "(";
   std::apply(
       [&](const auto &...args) {
@@ -17,6 +17,7 @@ std::ostream &operator<<(std::ostream &stream, std::tuple<T...> &t) {
   return stream;
 }
 
+namespace ibbv::utils {
 template <typename... T> class Counter {
 public:
   using key_t = std::tuple<T...>;
@@ -40,3 +41,4 @@ protected:
   std::string title;
   std::map<key_t, int> recMap;
 };
+} // namespace ibbv::utils
