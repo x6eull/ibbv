@@ -12,7 +12,7 @@
 
 namespace ibbv {
 template <size_t MaxTbvSize =
-              (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t)>
+              (sizeof(IndexedBlockBitVector<>) - 4) / sizeof(uint32_t)>
 class AdaptiveBitVector {
 public:
   using index_t = uint32_t;
@@ -253,8 +253,25 @@ public:
   }
   void intersectWithComplement(const AdaptiveBitVector& lhs,
                                const AdaptiveBitVector& rhs) noexcept {
-    *this = lhs;
-    *this -= rhs;
+    IFE_CASE(
+        lhs.rep, rhs.rep,
+        {
+          auto new_rep = rep.template emplace<tbv>();
+          new_rep.diff_into_this(*lptr, *rptr);
+        },
+        {
+          auto new_rep = rep.template emplace<tbv>();
+          new_rep.diff_into_this(*lptr, *rptr);
+        },
+        {
+          auto new_rep = rep.template emplace<ibbv>();
+          for (const auto i : *rptr)
+            new_rep.reset(i);
+        },
+        {
+          auto new_rep = rep.template emplace<ibbv>();
+          new_rep.intersectWithComplement(*lptr, *rptr);
+        });
   }
 
   friend struct std::hash<AdaptiveBitVector>;

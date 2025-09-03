@@ -17,7 +17,7 @@ namespace ibbv {
 template <typename index_t, size_t MAX_SIZE> class TinyBitVector {
 protected:
   using data_container = std::array<index_t, MAX_SIZE>;
-  data_container data{};
+  data_container data;
   size_t _count = 0;
 
 public:
@@ -159,8 +159,8 @@ public:
     std::array<index_t, 2 * MAX_SIZE> tmp;
     const auto tmp_end = static_cast<typename data_container::const_iterator>(
         std::set_union(begin(), end(), rhs.begin(), rhs.end(), tmp.begin()));
-    const auto new_count = tmp_end - tmp.cbegin();
-    if (new_count > (decltype(new_count))MAX_SIZE) {
+    const size_t new_count = tmp_end - tmp.cbegin();
+    if (new_count > MAX_SIZE) {
       expand(expanded, tmp.cbegin(), tmp_end);
       return true;
     } else {
@@ -187,25 +187,31 @@ public:
              begin();
     return count() != prev_count;
   }
+  void diff_into_this(const TinyBitVector& lhs, const TinyBitVector& rhs) {
+    _count = std::set_difference(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
+                                 data.begin()) -
+             begin();
+  }
+  void diff_into_this(const TinyBitVector& lhs,
+                      const IndexedBlockBitVector<>& rhs) {
+    _count = std::copy_if(lhs.begin(), lhs.end(), data.begin(),
+                          [&](const index_t v) { return !rhs.test(v); }) -
+             begin();
+  }
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool inplace_diff(const TinyBitVector& rhs) noexcept {
     auto prev_count = count();
-    _count = std::set_difference(begin(), end(), rhs.begin(), rhs.end(),
-                                 data.begin()) -
-             begin();
+    diff_into_this(*this, rhs);
     return count() != prev_count;
   }
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool inplace_diff(const IndexedBlockBitVector<>& rhs) noexcept {
     auto prev_count = count();
-    _count = std::remove_if(data.begin(), data.begin() + count(),
-                            [&](const index_t v) { return rhs.test(v); }) -
-             begin();
+    diff_into_this(*this, rhs);
     return count() != prev_count;
   }
-
   friend struct std::hash<TinyBitVector>;
 };
 } // namespace ibbv
