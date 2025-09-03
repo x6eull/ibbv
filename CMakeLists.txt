@@ -7,9 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(ibbv INTERFACE 
-  ${CMAKE_CURRENT_LIST_DIR}/include/IndexedBlockBitVector.h
-  ${CMAKE_CURRENT_LIST_DIR}/include/bit_utils.h
-  ${CMAKE_CURRENT_LIST_DIR}/include/Counter.h
+  ${CMAKE_CURRENT_LIST_DIR}/include/AdaptiveBitVector.h
 )
 set_target_properties(ibbv PROPERTIES LINKER_LANGUAGE CXX)
 # target_compile_definitions(ibbv INTERFACE IBBV_COUNT_OP=1)

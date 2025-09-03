@@ -8,7 +8,7 @@ namespace ibbv::test {
 using set = std::set<ele_idx>;
 static constexpr size_t max_ele = 128 * (32 + 8);
 TEST(TrivialTest, Set) {
-  IBBV vec;
+  ABV vec;
   const auto bits = random_dist(max_ele * 0.3, max_ele);
   set ordered_bits{bits.begin(), bits.end()};
   for (const auto b : ordered_bits)
@@ -19,14 +19,14 @@ TEST(TrivialTest, Set) {
 }
 
 TEST(ReferenceTest, Union) {
-  IBBV v1, v2;
+  ABV v1, v2;
   const auto b1 = random_dist(max_ele * 0.3, max_ele),
              b2 = random_dist(max_ele * 0.3, max_ele);
   for (const auto b : b1)
     v1.set(b);
   for (const auto b : b2)
     v2.set(b);
-  IBBV v3 = v1 | v2;
+  ABV v3 = v1 | v2;
   std::vector<ele_idx> std_result;
   std::set_union(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
                  std::back_inserter(std_result));
@@ -34,14 +34,14 @@ TEST(ReferenceTest, Union) {
 }
 
 TEST(ReferenceTest, Intersection) {
-  IBBV v1, v2;
+  ABV v1, v2;
   const auto b1 = random_dist(max_ele * 0.3, max_ele),
              b2 = random_dist(max_ele * 0.3, max_ele);
   for (const auto b : b1)
     v1.set(b);
   for (const auto b : b2)
     v2.set(b);
-  IBBV v3 = v1;
+  ABV v3 = v1;
   v3 &= v2;
   std::vector<ele_idx> std_result;
   std::set_intersection(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
@@ -53,14 +53,14 @@ TEST(ReferenceTest, Intersection) {
 }
 
 TEST(ReferenceTest, Difference) {
-  IBBV v1, v2;
+  ABV v1, v2;
   const auto b1 = random_dist(max_ele * .3, max_ele),
              b2 = random_dist(max_ele * .3, max_ele);
   for (const auto b : b1)
     v1.set(b);
   for (const auto b : b2)
     v2.set(b);
-  IBBV v3 = v1;
+  ABV v3 = v1;
   v3 -= v2;
   std::vector<ele_idx> std_result;
   std::set_difference(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
@@ -73,7 +73,7 @@ TEST(ReferenceTest, Difference) {
 }
 
 TEST(ReferenceTest, DifferenceAsReset) {
-  IBBV v1;
+  ABV v1;
   const auto b1 = random_dist(max_ele * .3, max_ele),
              b2 = random_dist(max_ele * .3, max_ele);
   for (const auto b : b1)
@@ -92,7 +92,7 @@ TEST(ReferenceTest, DifferenceAsReset) {
 
 TEST(ReferenceTest, Intersects) {
   for (int i = 0; i < 10000; i++) {
-    IBBV v1, v2;
+    ABV v1, v2;
     const auto b1 = random_dist(64, 128 * 10), b2 = random_dist(64, 128 * 10);
     for (const auto b : b1)
       v1.set(b);

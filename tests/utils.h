@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AdaptiveBitVector.h"
 #include "IndexedBlockBitVector.h"
 #include "SparseBitVector.h"
 #include <cstdint>
@@ -14,7 +15,7 @@ using ele_idx = int32_t;
 using common_rep = std::unordered_set<ele_idx>;
 /// block size in bits
 constexpr inline unsigned short BlockSize = 128;
-using IBBV = ibbv::IndexedBlockBitVector<BlockSize>;
+using ABV = ibbv::AdaptiveBitVector<>;
 using SBV = llvm::SparseBitVector<BlockSize>;
 
 static const auto global_seed = []() {

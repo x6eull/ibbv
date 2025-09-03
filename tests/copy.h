@@ -20,6 +20,6 @@ static const inline auto copy_args = {
     concat_vec({{0}, benchmark::CreateRange(1, 1 << 16, 8)}),
     benchmark::CreateRange(1, 128, 8),
 };
-BENCHMARK(BM_copy<IBBV>)->ArgsProduct(copy_args);
+BENCHMARK(BM_copy<ABV>)->ArgsProduct(copy_args);
 BENCHMARK(BM_copy<SBV>)->ArgsProduct(copy_args);
 } // namespace ibbv::test

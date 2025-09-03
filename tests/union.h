@@ -21,6 +21,6 @@ static const inline auto union_args = {
     benchmark::CreateRange(1, 1 << 3 * 8, 8),
     benchmark::CreateDenseRange(10, 90, 20),
 };
-BENCHMARK(BM_union<IBBV>)->ArgsProduct(union_args);
+BENCHMARK(BM_union<ABV>)->ArgsProduct(union_args);
 BENCHMARK(BM_union<SBV>)->ArgsProduct(union_args);
 } // namespace ibbv::test
