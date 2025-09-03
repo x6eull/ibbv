@@ -119,7 +119,7 @@ public:
   };
   static_assert(sizeof(Block) * 8 == BlockSize);
 
-  using index_t = int32_t;
+  using index_t = uint32_t;
 
 protected:
   template <typename T, size_t Align, size_t Threshold>
@@ -886,15 +886,15 @@ public:
   /// Returns an iterator to the beginning of this vector.
   /// NOTE: If you modify the vector after creating an iterator, the iterator
   /// is not stable and may cause UB if used.
-  IndexedBlockBitVectorIterator begin() const {
-    return IndexedBlockBitVectorIterator(*this);
+  iterator begin() const {
+    return iterator(*this);
   }
-  IndexedBlockBitVectorIterator end() const {
-    return IndexedBlockBitVectorIterator(*this, true);
+  iterator end() const {
+    return iterator(*this, true);
   }
 
   /// Return the first set bit in the bitmap.  Return -1 if no bits are set.
-  index_t find_first() const {
+  int32_t find_first() const {
     if (empty()) return -1;
     return *begin();
   }
