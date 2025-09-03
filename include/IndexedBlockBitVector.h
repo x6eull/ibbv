@@ -15,7 +15,6 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <cstring>
 #include <iterator>
 #include <memory>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -124,16 +123,7 @@ public:
 protected:
   template <typename T, size_t Align, size_t Threshold>
   class IbbvAllocator : public std::allocator<T> {
-    static_assert(std::is_same_v<index_t, T> || std::is_same_v<Block, T>,
-                  "Unsupported type");
-
-  protected:
-    IndexedBlockBitVector<>* ibbv;
-
   public:
-    IbbvAllocator(IndexedBlockBitVector<>* ibbv) : ibbv(ibbv) {}
-    DEFAULT_COPY_MOVE(IbbvAllocator)
-
     template <class U> struct rebind {
       using other = IbbvAllocator<U, Align, Threshold>;
     };
@@ -145,18 +135,10 @@ protected:
 
     [[nodiscard]] T* allocate(std::size_t n) {
       const auto nbytes = n * sizeof(T);
-      T* result;
       if (nbytes >= Threshold)
-        result = reinterpret_cast<T*>(
+        return reinterpret_cast<T*>(
             ::operator new(nbytes, std::align_val_t{Align}));
-      else result = reinterpret_cast<T*>(::operator new(nbytes));
-      if constexpr (std::is_same_v<index_t, T>)
-        ibbv->last_used_index = static_cast<index_const_iter_t>(
-            result + (ibbv->last_used_index - ibbv->indexes.cbegin()));
-      else
-        ibbv->last_used_block = static_cast<block_const_iter_t>(
-            result + (ibbv->last_used_block - ibbv->blocks.cbegin()));
-      return result;
+      else return reinterpret_cast<T*>(::operator new(nbytes));
     }
 
     void deallocate(T* p, std::size_t n) const noexcept {
@@ -171,8 +153,8 @@ protected:
   using block_allocator =
       IbbvAllocator<Block, 64, 64 / sizeof(index_t) * sizeof(Block)>;
   using block_container = std::vector<Block, block_allocator>;
-  index_container indexes{index_allocator{this}};
-  block_container blocks{block_allocator{this}};
+  index_container indexes{};
+  block_container blocks{};
   using index_iter_t = typename index_container::iterator;
   using index_const_iter_t = typename index_container::const_iterator;
   using block_iter_t = typename block_container::iterator;
@@ -212,28 +194,23 @@ protected:
       const index_const_iter_t& it) const noexcept {
     return blocks.cbegin() + (it - indexes.cbegin());
   }
-  mutable index_const_iter_t last_used_index{indexes.cbegin()};
-  mutable block_const_iter_t last_used_block{blocks.cbegin()};
+  mutable size_t last_used_pos{0};
   inline std::pair<index_const_iter_t, block_const_iter_t> find_lower_bound(
       index_t target_index) const noexcept {
     if (empty()) return {indexes.cend(), blocks.cend()};
-    if (last_used_index >= indexes.cend()) {
-      last_used_index = indexes.cend() - 1;
-      last_used_block = blocks.cend() - 1;
-    }
-    if (*last_used_index == target_index)
-      return {last_used_index, last_used_block};
+    if (last_used_pos >= size()) last_used_pos = size() - 1;
+    const auto last_used_index_it = indexes.cbegin() + last_used_pos;
+    if (*last_used_index_it == target_index)
+      return {last_used_index_it, get_block_iter(last_used_index_it)};
     else {
-      index_const_iter_t idx_it =
-          (target_index > *last_used_index)
-              ? std::lower_bound(last_used_index + 1, indexes.cend(),
+      index_const_iter_t lbound_idx_it =
+          (target_index > *last_used_index_it)
+              ? std::lower_bound(last_used_index_it + 1, indexes.cend(),
                                  target_index)
-              : std::lower_bound(indexes.cbegin(), last_used_index,
+              : std::lower_bound(indexes.cbegin(), last_used_index_it,
                                  target_index);
-      const auto blk_it = get_block_iter(idx_it);
-      last_used_index = idx_it;
-      last_used_block = blk_it;
-      return {last_used_index, last_used_block};
+      last_used_pos = lbound_idx_it - indexes.cbegin();
+      return {lbound_idx_it, get_block_iter(lbound_idx_it)};
     }
   }
   inline std::pair<index_iter_t, block_iter_t> find_lower_bound_mut(
@@ -244,21 +221,26 @@ protected:
   }
 
   // Static helper methods
-  template <typename idx_type, idx_type... indices, typename Func>
-  static _inline void unroll_loop(std::integer_sequence<idx_type, indices...>,
-                                  Func f) {
-    (f(std::integral_constant<idx_type, indices>()), ...);
+
+#define unroll_loop(var, times, ...)                                           \
+  static_assert(times == 4);                                                   \
+  {                                                                            \
+    constexpr int var = 0;                                                     \
+    __VA_ARGS__;                                                               \
+  }                                                                            \
+  {                                                                            \
+    constexpr int var = 1;                                                     \
+    __VA_ARGS__;                                                               \
+  }                                                                            \
+  {                                                                            \
+    constexpr int var = 2;                                                     \
+    __VA_ARGS__;                                                               \
+  }                                                                            \
+  {                                                                            \
+    constexpr int var = 3;                                                     \
+    __VA_ARGS__;                                                               \
   }
-  template <typename idx_type, idx_type... indices, typename Func>
-  static _inline bool unroll_loop_and(
-      std::integer_sequence<idx_type, indices...>, Func f) {
-    return (f(std::integral_constant<idx_type, indices>()) && ...);
-  }
-  template <typename idx_type, idx_type... indices, typename Func>
-  static _inline bool unroll_loop_or(
-      std::integer_sequence<idx_type, indices...>, Func f) {
-    return (f(std::integral_constant<idx_type, indices>()) || ...);
-  }
+
   static _inline std::pair<uint8_t, uint8_t> adv_count(
       const IndexedBlockBitVector<>& lhs, const IndexedBlockBitVector<>& rhs,
       const __m512i& lhs_idx, const __m512i& rhs_idx, const size_t lhs_i,
@@ -334,7 +316,7 @@ protected:
       auto dup_match_this = duplicate_bits(match_this);
 
       // compute OR result of matched blocks
-      unroll_loop(std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
+      unroll_loop(i, 4, {
         /// matched & ordered 4 blocks (8 u64) from memory.
         /// zero in case of out of bounds
         const auto v_this = _mm512_loadu_epi64(&block_at(lhs_i + i * 4));
@@ -444,7 +426,7 @@ protected:
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
       // compute AND result of matched blocks
-      unroll_loop(std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
+      unroll_loop(i, 4, {
         const auto cur_gather_this_offset_u16x8 =
             _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
         const auto cur_gather_rhs_offset_u16x8 =
@@ -563,7 +545,7 @@ protected:
       const auto dup_advance_lhs = duplicate_bits(advance_lhs_to_bits);
 
       // compute AND result of matched blocks
-      unroll_loop(std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
+      unroll_loop(i, 4, {
         /// matched & ordered 4 blocks (8 u64) from memory. zero
         /// in case of out of bounds
         const auto v_this = _mm512_maskz_loadu_epi64(dup_advance_lhs >> (i * 8),
@@ -671,32 +653,28 @@ protected:
 
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
-      const auto cur_result = unroll_loop_and(
-          std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
-            const auto cur_gather_this_offset_u16x8 =
-                _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
-            const auto cur_gather_rhs_offset_u16x8 =
-                _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
+      unroll_loop(i, 4, {
+        const auto cur_gather_this_offset_u16x8 =
+            _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
+        const auto cur_gather_rhs_offset_u16x8 =
+            _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
 
-            const auto cur_gather_this_offset_u64x8 =
-                _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
-            const auto cur_gather_rhs_offset_u64x8 =
-                _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
+        const auto cur_gather_this_offset_u64x8 =
+            _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
+        const auto cur_gather_rhs_offset_u64x8 =
+            _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
 
-            const auto intersect_this = _mm512_mask_i64gather_epi64(
-                all_zero, n_matched_bits_dup >> i * 8,
-                cur_gather_this_offset_u64x8, gather_this_base_addr, 8);
-            const auto intersect_rhs = _mm512_mask_i64gather_epi64(
-                all_zero, n_matched_bits_dup >> i * 8,
-                cur_gather_rhs_offset_u64x8, gather_rhs_base_addr, 8);
+        const auto intersect_this = _mm512_mask_i64gather_epi64(
+            all_zero, n_matched_bits_dup >> i * 8, cur_gather_this_offset_u64x8,
+            gather_this_base_addr, 8);
+        const auto intersect_rhs = _mm512_mask_i64gather_epi64(
+            all_zero, n_matched_bits_dup >> i * 8, cur_gather_rhs_offset_u64x8,
+            gather_rhs_base_addr, 8);
 
-            const auto and_result =
-                _mm512_and_epi64(intersect_this, intersect_rhs);
+        const auto and_result = _mm512_and_epi64(intersect_this, intersect_rhs);
 
-            if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs)) return false;
-            return true;
-          });
-      if (!cur_result) return false;
+        if (!avx_vec<512>::eq_cmp(and_result, intersect_rhs)) return false;
+      });
       lhs_i += advance_lhs, rhs_i += advance_rhs;
     }
     while (lhs_i < size() && rhs_i < rhs.size()) {
@@ -740,32 +718,29 @@ protected:
 
       const uint32_t n_matched_bits_dup = ((uint64_t)1 << (n_matched * 2)) - 1;
 
-      const auto cur_result = unroll_loop_or(
-          std::make_integer_sequence<uint8_t, 4>(), [&](const auto i) {
-            const auto cur_gather_this_offset_u16x8 =
-                _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
-            const auto cur_gather_rhs_offset_u16x8 =
-                _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
+      unroll_loop(i, 4, {
+        const auto cur_gather_this_offset_u16x8 =
+            _mm512_extracti64x2_epi64(gather_this_offset_u16x32, i);
+        const auto cur_gather_rhs_offset_u16x8 =
+            _mm512_extracti64x2_epi64(gather_rhs_offset_u16x32, i);
 
-            const auto cur_gather_this_offset_u64x8 =
-                _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
-            const auto cur_gather_rhs_offset_u64x8 =
-                _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
+        const auto cur_gather_this_offset_u64x8 =
+            _mm512_cvtepu16_epi64(cur_gather_this_offset_u16x8);
+        const auto cur_gather_rhs_offset_u64x8 =
+            _mm512_cvtepu16_epi64(cur_gather_rhs_offset_u16x8);
 
-            const auto intersect_this = _mm512_mask_i64gather_epi64(
-                all_zero, n_matched_bits_dup >> i * 8,
-                cur_gather_this_offset_u64x8, gather_this_base_addr, 8);
-            const auto intersect_rhs = _mm512_mask_i64gather_epi64(
-                all_zero, n_matched_bits_dup >> i * 8,
-                cur_gather_rhs_offset_u64x8, gather_rhs_base_addr, 8);
+        const auto intersect_this = _mm512_mask_i64gather_epi64(
+            all_zero, n_matched_bits_dup >> i * 8, cur_gather_this_offset_u64x8,
+            gather_this_base_addr, 8);
+        const auto intersect_rhs = _mm512_mask_i64gather_epi64(
+            all_zero, n_matched_bits_dup >> i * 8, cur_gather_rhs_offset_u64x8,
+            gather_rhs_base_addr, 8);
 
-            const auto and_result =
-                _mm512_and_epi64(intersect_this, intersect_rhs);
+        const auto and_result = _mm512_and_epi64(intersect_this, intersect_rhs);
 
-            // not zero => share any bits in common => return true
-            return !avx_vec<512>::is_zero(and_result);
-          });
-      if (cur_result) return true;
+        // not zero => share any bits in common => return true
+        if (!avx_vec<512>::is_zero(and_result)) return true;
+      });
       lhs_i += advance_lhs, rhs_i += advance_rhs;
     }
     while (lhs_i < size() && rhs_i < rhs.size()) {
@@ -897,38 +872,6 @@ public:
   int32_t find_first() const {
     if (empty()) return -1;
     return *begin();
-  }
-
-  /// Construct empty vector. No bits are set.
-  constexpr IndexedBlockBitVector() noexcept {}
-  IndexedBlockBitVector(const IndexedBlockBitVector& other) noexcept {
-    indexes = other.indexes;
-    blocks = other.blocks;
-    last_used_index = indexes.cbegin();
-    last_used_block = blocks.cbegin();
-  }
-  IndexedBlockBitVector& operator=(
-      const IndexedBlockBitVector& other) noexcept {
-    if (this == &other) return *this;
-    indexes = other.indexes;
-    blocks = other.blocks;
-    last_used_index = indexes.cbegin();
-    last_used_block = blocks.cbegin();
-    return *this;
-  }
-  IndexedBlockBitVector(IndexedBlockBitVector&& other) noexcept {
-    indexes = std::move(other.indexes);
-    blocks = std::move(other.blocks);
-    last_used_index = indexes.cbegin();
-    last_used_block = blocks.cbegin();
-  }
-  IndexedBlockBitVector& operator=(IndexedBlockBitVector&& other) noexcept {
-    if (this == &other) return *this;
-    indexes = std::move(other.indexes);
-    blocks = std::move(other.blocks);
-    last_used_index = indexes.cbegin();
-    last_used_block = blocks.cbegin();
-    return *this;
   }
 
   /// Returns true if no bits are set.

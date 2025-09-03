@@ -11,6 +11,8 @@
 #include "TinyBitVector.h"
 
 namespace ibbv {
+// set MaxTbvSize = (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t) =
+// 12 to save mem?
 template <size_t MaxTbvSize = 16> class AdaptiveBitVector {
 public:
   using index_t = uint32_t;

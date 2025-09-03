@@ -14,8 +14,7 @@ namespace ibbv {
 /// Mutation functions that can grow the vector requires an output argument for
 /// the expanded representation. NOTE: If the representation is expanded, the
 /// original representation is no longer valid.
-template <typename index_t = uint32_t, size_t MAX_SIZE = 16>
-class TinyBitVector {
+template <typename index_t, size_t MAX_SIZE> class TinyBitVector {
 protected:
   using data_container = std::array<index_t, MAX_SIZE>;
   data_container data{};
@@ -222,8 +221,9 @@ public:
 } // namespace ibbv
 
 namespace std {
-template <> struct hash<ibbv::TinyBitVector<>> {
-  std::size_t operator()(const ibbv::TinyBitVector<>& v) const {
+template <typename T, size_t MaxSize>
+struct hash<ibbv::TinyBitVector<T, MaxSize>> {
+  std::size_t operator()(const ibbv::TinyBitVector<T, MaxSize>& v) const {
     return v.count() ^ v.find_first();
   }
 };
