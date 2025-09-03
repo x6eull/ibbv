@@ -105,4 +105,21 @@ TEST(ReferenceTest, Intersects) {
     ASSERT_EQ(v1.intersects(v2), !std_result.empty());
   }
 }
+
+TEST(TBVTest, IntersectWithComplement) {
+  for (int i = 0; i < 10000; i++) {
+    ABV v1, v2;
+    const auto b1 = random_dist(10, 64), b2 = random_dist(10, 64);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    std::vector<ele_idx> std_result;
+    std::set_difference(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                        std::back_inserter(std_result));
+    ABV v3;
+    v3.intersectWithComplement(v1, v2);
+    ASSERT_EQ(to_common(v3), to_common(std_result));
+  }
+}
 } // namespace ibbv::test
