@@ -136,11 +136,9 @@ public:
         expand(expanded);
         expanded->set(n);
       } else {
-        typename data_container::iterator mit = data.begin() + (it - begin());
-        typename data_container::iterator mend = data.begin() + count();
-        std::copy_backward(it, end(), mend + 1);
+        std::copy_backward(it, end(), end() + 1);
+        *it = n;
         inc_size();
-        *mit = n;
       }
     } // found in the vector, noop
   }
@@ -154,11 +152,9 @@ public:
         expand(expanded);
         expanded->set(n);
       } else {
-        typename data_container::iterator mit = data.begin() + (it - begin());
-        typename data_container::iterator mend = data.begin() + count();
-        std::copy_backward(it, end(), mend + 1);
+        std::copy_backward(it, end(), end() + 1);
+        *it = n;
         inc_size();
-        *mit = n;
       }
       return true; // new bit is set
     }
@@ -168,7 +164,7 @@ public:
   inline void reset(index_t n) noexcept {
     const auto it = std::lower_bound(begin(), end(), n);
     if (it != end() && *it == n) {
-      std::copy(it + 1, end(), data.begin() + (it - begin()));
+      std::copy(it + 1, end(), it);
       dec_size();
     }
   }
@@ -217,7 +213,7 @@ public:
       expand(expanded, tmp.cbegin(), tmp_end);
       return true;
     } else {
-      resize_to(std::copy(tmp.cbegin(), tmp_end, data.begin()));
+      resize_to(std::copy(tmp.cbegin(), tmp_end, begin()));
       return new_count != prev_count;
     }
   }
@@ -225,25 +221,25 @@ public:
   /// Returns true if `this` changed.
   bool inplace_intersect(const TinyBitVector& rhs) noexcept {
     auto prev_count = count();
-    resize_to(std::set_intersection(begin(), end(), rhs.begin(), rhs.end(),
-                                    data.begin()));
+    resize_to(
+        std::set_intersection(begin(), end(), rhs.begin(), rhs.end(), begin()));
     return count() != prev_count;
   }
   /// Inplace intersect with rhs.
   /// Returns true if `this` changed.
   bool inplace_intersect(const IndexedBlockBitVector<>& rhs) noexcept {
     auto prev_count = count();
-    resize_to(std::set_intersection(begin(), end(), rhs.begin(), rhs.end(),
-                                    data.begin()));
+    resize_to(
+        std::set_intersection(begin(), end(), rhs.begin(), rhs.end(), begin()));
     return count() != prev_count;
   }
   void diff_into_this(const TinyBitVector& lhs, const TinyBitVector& rhs) {
     resize_to(std::set_difference(lhs.begin(), lhs.end(), rhs.begin(),
-                                  rhs.end(), data.begin()));
+                                  rhs.end(), begin()));
   }
   void diff_into_this(const TinyBitVector& lhs,
                       const IndexedBlockBitVector<>& rhs) {
-    resize_to(std::copy_if(lhs.begin(), lhs.end(), data.begin(),
+    resize_to(std::copy_if(lhs.begin(), lhs.end(), begin(),
                            [&](const index_t v) { return !rhs.test(v); }));
   }
   /// Inplace difference with rhs.
