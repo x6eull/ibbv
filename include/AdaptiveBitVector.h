@@ -11,9 +11,9 @@
 #include "TinyBitVector.h"
 
 namespace ibbv {
-// set MaxTbvSize = (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t) =
-// 12 to save mem?
-template <size_t MaxTbvSize = 16> class AdaptiveBitVector {
+template <size_t MaxTbvSize =
+              (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t)>
+class AdaptiveBitVector {
 public:
   using index_t = uint32_t;
   using tbv = TinyBitVector<index_t, MaxTbvSize>;
@@ -104,7 +104,7 @@ public:
     return std::visit([](auto&& arg) { return arg.empty(); }, rep);
   }
   auto count() const noexcept {
-    return std::visit([](auto&& arg) { return arg.count(); }, rep);
+    return std::visit([](auto&& arg) { return (size_t)arg.count(); }, rep);
   }
   auto clear() noexcept {
     return std::visit([](auto&& arg) { return arg.clear(); }, rep);

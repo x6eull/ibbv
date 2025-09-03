@@ -18,45 +18,27 @@ template <typename index_t, size_t MAX_SIZE> class TinyBitVector {
 protected:
   using data_container = std::array<index_t, MAX_SIZE>;
   data_container data{};
-  typename data_container::const_iterator data_end{data.cbegin()};
+  size_t _count = 0;
 
 public:
-  TinyBitVector() noexcept = default;
-  TinyBitVector(const TinyBitVector& rhs) noexcept
-      : data(rhs.data), data_end(data.begin() + rhs.count()) {}
-  TinyBitVector& operator=(const TinyBitVector& rhs) noexcept {
-    // no self assignment check needed
-    data = rhs.data;
-    data_end = data.begin() + rhs.count();
-    return *this;
-  }
-  TinyBitVector(TinyBitVector&& rhs) noexcept
-      : data(std::move(rhs.data)), data_end(data.begin() + rhs.count()) {}
-  TinyBitVector& operator=(TinyBitVector&& rhs) noexcept {
-    if (this == &rhs) return *this;
-    data = std::move(rhs.data);
-    data_end = data.begin() + rhs.count();
-    return *this;
-  }
-
   using iterator = typename data_container::const_iterator;
   auto begin() const noexcept {
     return data.cbegin();
   }
   auto end() const noexcept {
-    return data_end;
+    return data.cbegin() + _count;
   }
   /// Returns true if no bits are set.
   auto empty() const noexcept {
     return begin() == end();
   }
   /// Returns the count of bits set.
-  uint32_t count() const noexcept {
-    return data_end - data.cbegin();
+  size_t count() const noexcept {
+    return _count;
   };
   /// Empty the set.
   void clear() noexcept {
-    data_end = begin();
+    _count = 0;
   }
 
   template <typename ForwardIt>
@@ -107,7 +89,7 @@ public:
         typename data_container::iterator mit = data.begin() + (it - begin());
         typename data_container::iterator mend = data.begin() + count();
         std::copy_backward(it, end(), mend + 1);
-        ++data_end;
+        ++_count;
         *mit = n;
       }
     } // found in the vector, noop
@@ -125,7 +107,7 @@ public:
         typename data_container::iterator mit = data.begin() + (it - begin());
         typename data_container::iterator mend = data.begin() + count();
         std::copy_backward(it, end(), mend + 1);
-        ++data_end;
+        ++_count;
         *mit = n;
       }
       return true; // new bit is set
@@ -135,8 +117,10 @@ public:
   /// Unset bit `n`.
   void reset(index_t n) noexcept {
     const auto it = std::lower_bound(begin(), end(), n);
-    if (it != end() && *it == n)
-      data_end = std::copy(it + 1, end(), data.begin() + (it - begin()));
+    if (it != end() && *it == n) {
+      std::copy(it + 1, end(), data.begin() + (it - begin()));
+      --_count;
+    }
   }
   /// Returns true if `this` contains all bits of rhs.
   bool contains(const TinyBitVector& rhs) const noexcept {
@@ -180,7 +164,8 @@ public:
       expand(expanded, tmp.cbegin(), tmp_end);
       return true;
     } else {
-      data_end = std::copy(tmp.cbegin(), tmp_end, data.begin());
+      std::copy(tmp.cbegin(), tmp_end, data.begin());
+      _count = new_count;
       return new_count != prev_count;
     }
   }
@@ -188,34 +173,39 @@ public:
   /// Returns true if `this` changed.
   bool inplace_intersect(const TinyBitVector& rhs) noexcept {
     auto prev_count = count();
-    data_end = std::set_intersection(begin(), end(), rhs.begin(), rhs.end(),
-                                     data.begin());
+    _count = std::set_intersection(begin(), end(), rhs.begin(), rhs.end(),
+                                   data.begin()) -
+             begin();
     return count() != prev_count;
   }
   /// Inplace intersect with rhs.
   /// Returns true if `this` changed.
   bool inplace_intersect(const IndexedBlockBitVector<>& rhs) noexcept {
     auto prev_count = count();
-    data_end = std::set_intersection(begin(), end(), rhs.begin(), rhs.end(),
-                                     data.begin());
+    _count = std::set_intersection(begin(), end(), rhs.begin(), rhs.end(),
+                                   data.begin()) -
+             begin();
     return count() != prev_count;
   }
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool inplace_diff(const TinyBitVector& rhs) noexcept {
     auto prev_count = count();
-    data_end = std::set_difference(begin(), end(), rhs.begin(), rhs.end(),
-                                   data.begin());
+    _count = std::set_difference(begin(), end(), rhs.begin(), rhs.end(),
+                                 data.begin()) -
+             begin();
     return count() != prev_count;
   }
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool inplace_diff(const IndexedBlockBitVector<>& rhs) noexcept {
     auto prev_count = count();
-    data_end = std::remove_if(data.begin(), data.begin() + count(),
-                              [&](const index_t v) { return rhs.test(v); });
+    _count = std::remove_if(data.begin(), data.begin() + count(),
+                            [&](const index_t v) { return rhs.test(v); }) -
+             begin();
     return count() != prev_count;
   }
+
   friend struct std::hash<TinyBitVector>;
 };
 } // namespace ibbv
