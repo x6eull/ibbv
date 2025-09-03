@@ -11,9 +11,11 @@
 #include "TinyBitVector.h"
 
 namespace ibbv {
-template <size_t MaxTbvSize =
-              (sizeof(IndexedBlockBitVector<>) - 4) / sizeof(uint32_t)>
-class AdaptiveBitVector {
+static inline constexpr size_t DEFAULT_TBV_LIMIT =
+    (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t);
+static_assert(sizeof(TinyBitVector<uint32_t, DEFAULT_TBV_LIMIT>) ==
+              sizeof(IndexedBlockBitVector<>));
+template <size_t MaxTbvSize = DEFAULT_TBV_LIMIT> class AdaptiveBitVector {
 public:
   using index_t = uint32_t;
   using tbv = TinyBitVector<index_t, MaxTbvSize>;
