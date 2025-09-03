@@ -224,7 +224,7 @@ public:
         },
         {
           // ibbv &= tbv
-          auto new_rep = tbv{*rptr};
+          tbv new_rep{*rptr};
           const auto result = new_rep.inplace_intersect(*lptr);
           rep.template emplace<tbv>(std::move(new_rep));
           return result;
@@ -256,21 +256,21 @@ public:
     IFE_CASE(
         lhs.rep, rhs.rep,
         {
-          auto new_rep = rep.template emplace<tbv>();
+          auto& new_rep = rep.template emplace<tbv>();
           new_rep.diff_into_this(*lptr, *rptr);
         },
         {
-          auto new_rep = rep.template emplace<tbv>();
+          auto& new_rep = rep.template emplace<tbv>();
           new_rep.diff_into_this(*lptr, *rptr);
         },
         {
-          auto new_rep = rep.template emplace<ibbv>();
+          auto& new_rep = rep.template emplace<ibbv>(*lptr);
           for (const auto i : *rptr)
             new_rep.reset(i);
         },
         {
-          auto new_rep = rep.template emplace<ibbv>();
-          new_rep.intersectWithComplement(*lptr, *rptr);
+          auto& new_rep = rep.template emplace<ibbv>(*lptr);
+          new_rep -= *rptr;
         });
   }
 

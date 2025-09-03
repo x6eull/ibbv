@@ -999,17 +999,6 @@ public:
   bool operator-=(const IndexedBlockBitVector& rhs) {
     return diff_simd(rhs);
   }
-  /// Same as `operator-=(rhs)`
-  bool intersectWithComplement(const IndexedBlockBitVector& rhs) {
-    return *this -= rhs;
-  }
-  /// Compute lhs - rhs, store the result into `this`.
-  void intersectWithComplement(const IndexedBlockBitVector& lhs,
-                               const IndexedBlockBitVector& rhs) {
-    // TODO: inefficient!
-    *this = lhs;
-    intersectWithComplement(rhs);
-  }
 
   friend struct std::hash<ibbv::IndexedBlockBitVector<>>;
 };
