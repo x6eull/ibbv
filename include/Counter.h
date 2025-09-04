@@ -31,7 +31,7 @@ public:
   }
   Counter(const std::string& title) : title(title) {}
   ~Counter() {
-    for (const auto [k, c] : recMap)
+    for (const auto &[k, c] : recMap)
       std::cout << "[" << title << "] " << k << ": " << c << std::endl;
   }
 
