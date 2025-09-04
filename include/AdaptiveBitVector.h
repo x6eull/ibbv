@@ -53,6 +53,9 @@ protected:
                 unmatch_block)
 
 public:
+  auto impl_type() const noexcept {
+    return rep.index();
+  }
   class AdaptiveBitVectorIterator {
   protected:
     std::variant<typename tbv::iterator, typename ibbv::iterator> it_rep;
@@ -109,7 +112,7 @@ public:
     return std::visit([](auto&& arg) { return (size_t)arg.count(); }, rep);
   }
   auto clear() noexcept {
-    return std::visit([](auto&& arg) { return arg.clear(); }, rep);
+    rep.template emplace<tbv>();
   }
   auto test(index_t n) const noexcept {
     return std::visit([=](auto&& arg) { return arg.test(n); }, rep);
@@ -273,6 +276,15 @@ public:
         {
           auto& new_rep = rep.template emplace<ibbv>(*lptr);
           new_rep -= *rptr;
+          const auto new_count = new_rep.count();
+          if (new_count <= MaxTbvSize) { // shrink to tbv
+            index_t tmp[MaxTbvSize];
+            const auto tmp_end = std::copy(new_rep.begin(), new_rep.end(),
+                                           static_cast<index_t*>(tmp));
+            auto& tbv_rep = rep.template emplace<tbv>();
+            std::copy(static_cast<index_t*>(tmp), tmp_end, tbv_rep.begin());
+            tbv_rep.resize_to(tbv_rep.begin() + new_count);
+          }
         });
   }
 

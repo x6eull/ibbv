@@ -39,6 +39,7 @@ template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
                 "BlockSize other than 128 is unsupported currently");
 
 public:
+  template <size_t MaxTbvSize> friend class AdaptiveBitVector;
   using UnitType = uint64_t;
   static constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
   static constexpr uint16_t UnitsPerBlock = BlockSize / UnitBits;
@@ -881,7 +882,6 @@ public:
 
   /// Returns the count of bits set.
   uint32_t count() const noexcept {
-    // TODO: improve
     if (size() == 0) return 0;
 
 #if __AVX512VPOPCNTDQ__ && __AVX512VL__
