@@ -203,6 +203,11 @@ protected:
       --num_block;
       start = realloc(start, bytes_needed(num_block));
     }
+    inline void clear() {
+      std::free(start);
+      start = nullptr;
+      num_block = 0;
+    }
 
     /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 16
     /// (UB otherwise)
@@ -975,10 +980,9 @@ public:
 #endif
   }
 
-  /// Empty the set.
+  /// Empty the set and release memory holded.
   void clear() noexcept {
-    indexes.clear();
-    blocks.clear();
+    storage.clear();
   }
 
   /// Returns true if bit `n` is set.
