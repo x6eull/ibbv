@@ -34,15 +34,15 @@ using namespace ibbv::utils;
 /// A variant of sparse bit vector that utilizes SIMD technology to acclerate
 /// computation.
 /// The implementation is not thread-safe.
-template <uint16_t BlockSize = 128> class IndexedBlockBitVector {
-  static_assert(BlockSize == 128,
+template <uint16_t BlockBits = 128> class IndexedBlockBitVector {
+  static_assert(BlockBits == 128,
                 "BlockSize other than 128 is unsupported currently");
 
 public:
   template <size_t MaxTbvSize> friend class AdaptiveBitVector;
   using UnitType = uint64_t;
   static constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
-  static constexpr uint16_t UnitsPerBlock = BlockSize / UnitBits;
+  static constexpr uint16_t UnitsPerBlock = BlockBits / UnitBits;
 
   struct Block {
     UnitType data[UnitsPerBlock];
@@ -58,7 +58,7 @@ public:
 
     /// Returns true if all bits are zero.
     bool empty() const noexcept {
-      return testz<BlockSize>(data);
+      return testz<BlockBits>(data);
     }
 
     bool test(size_t index) const noexcept {
@@ -90,15 +90,15 @@ public:
     }
 
     bool contains(const Block& rhs) const noexcept {
-      return ibbv::utils::contains<BlockSize>(data, rhs.data);
+      return ibbv::utils::contains<BlockBits>(data, rhs.data);
     }
 
     bool intersects(const Block& rhs) const noexcept {
-      return ibbv::utils::intersects<BlockSize>(data, rhs.data);
+      return ibbv::utils::intersects<BlockBits>(data, rhs.data);
     }
 
     bool operator==(const Block& rhs) const noexcept {
-      return ibbv::utils::cmpeq<BlockSize>(data, rhs.data);
+      return ibbv::utils::cmpeq<BlockBits>(data, rhs.data);
     }
 
     bool operator!=(const Block& rhs) const noexcept {
@@ -106,18 +106,17 @@ public:
     }
 
     bool operator|=(const Block& rhs) noexcept {
-      return ibbv::utils::or_inplace<BlockSize>(data, rhs.data);
+      return ibbv::utils::or_inplace<BlockBits>(data, rhs.data);
     }
 
     ibbv::utils::ComposedChangeResult operator&=(const Block& rhs) noexcept {
-      return ibbv::utils::and_inplace<BlockSize>(data, rhs.data);
+      return ibbv::utils::and_inplace<BlockBits>(data, rhs.data);
     }
 
     ibbv::utils::ComposedChangeResult operator-=(const Block& rhs) noexcept {
-      return ibbv::utils::diff_inplace<BlockSize>(data, rhs.data);
+      return ibbv::utils::diff_inplace<BlockBits>(data, rhs.data);
     }
   };
-  static_assert(sizeof(Block) * 8 == BlockSize);
 
   using index_t = uint32_t;
 
@@ -486,19 +485,19 @@ protected:
         changed = true;
       } else if (lhs_ind > rhs_ind) ++rhs_i;
       else { // lhs_ind == rhs_ind
-        const auto vcur_this = avx_vec<BlockSize>::load(block_at(lhs_i).data),
+        const auto vcur_this = avx_vec<BlockBits>::load(block_at(lhs_i).data),
                    vcur_rhs =
-                       avx_vec<BlockSize>::load(rhs.block_at(rhs_i).data);
-        const auto and_result = avx_vec<BlockSize>::and_op(vcur_this, vcur_rhs);
-        if (avx_vec<BlockSize>::is_zero(and_result))
+                       avx_vec<BlockBits>::load(rhs.block_at(rhs_i).data);
+        const auto and_result = avx_vec<BlockBits>::and_op(vcur_this, vcur_rhs);
+        if (avx_vec<BlockBits>::is_zero(and_result))
           // no bits in common, skip this block
           changed = true;
         else {
           if (!changed) // compute `changed` if not already set
-            changed = !avx_vec<BlockSize>::eq_cmp(vcur_this, and_result);
+            changed = !avx_vec<BlockBits>::eq_cmp(vcur_this, and_result);
 
           // store the result
-          avx_vec<BlockSize>::store(block_at(valid_count).data, and_result);
+          avx_vec<BlockBits>::store(block_at(valid_count).data, and_result);
           indexes[valid_count] = lhs_ind;
           ++valid_count; // increment valid count
         }
@@ -595,16 +594,16 @@ protected:
         ++valid_count;
       } else if (lhs_ind > rhs_ind) ++rhs_i;
       else { // compute ANDNOT
-        const auto v_this = avx_vec<BlockSize>::load(&block_at(lhs_i));
-        const auto v_rhs = avx_vec<BlockSize>::load(&rhs.block_at(rhs_i));
-        const auto andnot_result = avx_vec<BlockSize>::andnot_op(v_this, v_rhs);
-        if (avx_vec<BlockSize>::is_zero(andnot_result)) // changed to zero
+        const auto v_this = avx_vec<BlockBits>::load(&block_at(lhs_i));
+        const auto v_rhs = avx_vec<BlockBits>::load(&rhs.block_at(rhs_i));
+        const auto andnot_result = avx_vec<BlockBits>::andnot_op(v_this, v_rhs);
+        if (avx_vec<BlockBits>::is_zero(andnot_result)) // changed to zero
           changed = true;
         else {
           if (!changed)
-            changed = !avx_vec<BlockSize>::eq_cmp(v_this, andnot_result);
+            changed = !avx_vec<BlockBits>::eq_cmp(v_this, andnot_result);
           indexes[valid_count] = lhs_ind;
-          avx_vec<BlockSize>::store(&block_at(valid_count), andnot_result);
+          avx_vec<BlockBits>::store(&block_at(valid_count), andnot_result);
           valid_count++;
         }
         ++lhs_i, ++rhs_i;
@@ -886,15 +885,15 @@ public:
 
 #if __AVX512VPOPCNTDQ__ && __AVX512VL__
     auto it = blocks.begin();
-    const auto v0 = avx_vec<BlockSize>::load(&(it->data));
-    auto c = avx_vec<BlockSize>::popcnt(v0);
+    const auto v0 = avx_vec<BlockBits>::load(&(it->data));
+    auto c = avx_vec<BlockBits>::popcnt(v0);
     ++it;
     for (; it != blocks.end(); ++it) {
-      const auto curv = avx_vec<BlockSize>::load(&(it->data));
-      const auto curc = avx_vec<BlockSize>::popcnt(curv);
-      c = avx_vec<BlockSize>::add_op(c, curc);
+      const auto curv = avx_vec<BlockBits>::load(&(it->data));
+      const auto curc = avx_vec<BlockBits>::popcnt(curv);
+      c = avx_vec<BlockBits>::add_op(c, curc);
     }
-    return avx_vec<BlockSize>::reduce_add(c);
+    return avx_vec<BlockBits>::reduce_add(c);
 #else
     uint32_t result = 0;
     auto arr = reinterpret_cast<const uint32_t*>(this->blocks.data());
@@ -912,42 +911,42 @@ public:
 
   /// Returns true if bit `n` is set.
   bool test(index_t n) const noexcept {
-    const auto target_ind = n - (n % BlockSize);
+    const auto target_ind = n - (n % BlockBits);
     const auto [index_iter, block_iter] = find_lower_bound(target_ind);
     if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
       return false;
-    else return block_iter->test(n % BlockSize);
+    else return block_iter->test(n % BlockBits);
   }
 
   /// Set bit `n` (zero-based).
   void set(index_t n) noexcept {
-    const auto target_ind = n - (n % BlockSize);
+    const auto target_ind = n - (n % BlockBits);
     const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
     if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
-      emplace_at(index_iter, block_iter, target_ind, n % BlockSize);
-    else return block_iter->set(n % BlockSize);
+      emplace_at(index_iter, block_iter, target_ind, n % BlockBits);
+    else return block_iter->set(n % BlockBits);
   }
 
   /// Check if bit `n` is set. If it is, returns false.
   /// Otherwise, set it and return true.
   bool test_and_set(index_t n) noexcept {
-    const auto target_ind = n - (n % BlockSize);
+    const auto target_ind = n - (n % BlockBits);
     const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
     if (index_iter == indexes.cend() ||
         *index_iter != target_ind) { // not found
-      emplace_at(index_iter, block_iter, target_ind, n % BlockSize);
+      emplace_at(index_iter, block_iter, target_ind, n % BlockBits);
       return true;
-    } else return block_iter->test_and_set(n % BlockSize);
+    } else return block_iter->test_and_set(n % BlockBits);
   }
 
   /// Unset bit `n`.
   void reset(index_t n) noexcept {
-    const auto target_ind = n - (n % BlockSize);
+    const auto target_ind = n - (n % BlockBits);
     const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
     if (index_iter == indexes.cend() || *index_iter != target_ind)
       return; // not found
     auto& d = *block_iter;
-    d.reset(n % BlockSize);
+    d.reset(n % BlockBits);
     if (d.empty()) {
       indexes.erase(index_iter);
       blocks.erase(block_iter);
