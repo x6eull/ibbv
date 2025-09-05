@@ -120,13 +120,13 @@ public:
   using index_t = uint32_t;
 
 protected:
+  static inline constexpr auto IndexReservedBits = log2int<BlockBits>;
+  static inline constexpr index_t IndexValidBitsMask =
+      ~((1 << IndexReservedBits) - 1);
   struct IBBVStorage {
   public:
     static inline constexpr auto IndexSize = sizeof(index_t);
     static inline constexpr auto BlockSize = sizeof(Block);
-    static inline constexpr auto IndexReservedBits = log2int<BlockBits>;
-    static inline constexpr index_t IndexValidBitsMask =
-        ~((1 << IndexReservedBits) - 1);
 
     std::byte* start;
     size_t num_block;
@@ -201,7 +201,8 @@ protected:
       std::memmove(blk_at(pos), blk_at(pos + 1),
                    (num_block - pos - 1) * BlockSize);
       --num_block;
-      start = realloc(start, bytes_needed(num_block));
+      start =
+          reinterpret_cast<std::byte*>(realloc(start, bytes_needed(num_block)));
     }
     inline void clear() {
       std::free(start);
@@ -960,24 +961,24 @@ public:
   uint32_t count() const noexcept {
     if (size() == 0) return 0;
 
-#if __AVX512VPOPCNTDQ__ && __AVX512VL__
-    auto it = blocks.begin();
-    const auto v0 = avx_vec<BlockBits>::load(&(it->data));
-    auto c = avx_vec<BlockBits>::popcnt(v0);
-    ++it;
-    for (; it != blocks.end(); ++it) {
-      const auto curv = avx_vec<BlockBits>::load(&(it->data));
-      const auto curc = avx_vec<BlockBits>::popcnt(curv);
-      c = avx_vec<BlockBits>::add_op(c, curc);
+    if constexpr (__AVX512VPOPCNTDQ__ && __AVX512VL__) {
+      const Block* it = storage.blk_at(0);
+      const auto v0 = avx_vec<BlockBits>::load(&(it->data));
+      auto c = avx_vec<BlockBits>::popcnt(v0);
+      ++it;
+      for (; it != storage.blk_at(size()); ++it) {
+        const auto curv = avx_vec<BlockBits>::load(&(it->data));
+        const auto curc = avx_vec<BlockBits>::popcnt(curv);
+        c = avx_vec<BlockBits>::add_op(c, curc);
+      }
+      return avx_vec<BlockBits>::reduce_add(c);
+    } else {
+      uint32_t result = 0;
+      auto arr = reinterpret_cast<const uint64_t*>(storage.blk_at(0));
+      for (size_t i = 0; i < size() * sizeof(Block) / 8; ++i, ++arr)
+        result += ibbv::utils::popcnt(*arr);
+      return result;
     }
-    return avx_vec<BlockBits>::reduce_add(c);
-#else
-    uint32_t result = 0;
-    auto arr = reinterpret_cast<const uint32_t*>(this->blocks.data());
-    for (size_t i = 0; i < size() * (sizeof(Block) / 8); ++i, ++arr)
-      result += ibbv::utils::popcnt(*arr);
-    return result;
-#endif
   }
 
   /// Empty the set and release memory holded.
@@ -987,46 +988,46 @@ public:
 
   /// Returns true if bit `n` is set.
   bool test(index_t n) const noexcept {
-    const auto target_ind = n - (n % BlockBits);
-    const auto [index_iter, block_iter] = find_lower_bound(target_ind);
-    if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
+    const auto target_ind = n & IndexValidBitsMask;
+    const auto pos = storage.find_lower_bound(target_ind);
+    if (pos == storage.num_block ||
+        *storage.idx_at(pos) != target_ind) // not found
       return false;
-    else return block_iter->test(n % BlockBits);
+    else return storage.blk_at(pos)->test(n % BlockBits);
   }
 
   /// Set bit `n` (zero-based).
   void set(index_t n) noexcept {
-    const auto target_ind = n - (n % BlockBits);
-    const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
-    if (index_iter == indexes.cend() || *index_iter != target_ind) // not found
-      emplace_at(index_iter, block_iter, target_ind, n % BlockBits);
-    else return block_iter->set(n % BlockBits);
+    const auto target_ind = n & IndexValidBitsMask;
+    const auto pos = storage.find_lower_bound(target_ind);
+    if (pos == storage.num_block ||
+        *storage.idx_at(pos) != target_ind) // not found
+      storage.insert(pos, n);
+    else storage.blk_at(pos)->set(n % BlockBits);
   }
 
   /// Check if bit `n` is set. If it is, returns false.
   /// Otherwise, set it and return true.
   bool test_and_set(index_t n) noexcept {
-    const auto target_ind = n - (n % BlockBits);
-    const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
-    if (index_iter == indexes.cend() ||
-        *index_iter != target_ind) { // not found
-      emplace_at(index_iter, block_iter, target_ind, n % BlockBits);
+    const auto target_ind = n & IndexValidBitsMask;
+    const auto pos = storage.find_lower_bound(target_ind);
+    if (pos == storage.num_block ||
+        *storage.idx_at(pos) != target_ind) { // not found
+      storage.insert(pos, n);
       return true;
-    } else return block_iter->test_and_set(n % BlockBits);
+    } else return storage.blk_at(pos)->test_and_set(n % BlockBits);
   }
 
   /// Unset bit `n`.
   void reset(index_t n) noexcept {
-    const auto target_ind = n - (n % BlockBits);
-    const auto [index_iter, block_iter] = find_lower_bound_mut(target_ind);
-    if (index_iter == indexes.cend() || *index_iter != target_ind)
-      return; // not found
-    auto& d = *block_iter;
-    d.reset(n % BlockBits);
-    if (d.empty()) {
-      indexes.erase(index_iter);
-      blocks.erase(block_iter);
-    }
+    const auto target_ind = n & IndexValidBitsMask;
+    const auto pos = storage.find_lower_bound(target_ind);
+    if (pos == storage.num_block ||
+        *storage.idx_at(pos) != target_ind) // not found
+      return;
+    Block* d = storage.blk_at(pos);
+    d->reset(n % BlockBits);
+    if (d->empty()) storage.remove(pos);
   }
 
   /// Returns true if `this` contains all bits of rhs.
