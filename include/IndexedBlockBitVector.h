@@ -250,10 +250,12 @@ protected:
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
       return *this;
     }
+    /// Move constructor. rhs is unstable after moving
     IBBVStorage(IBBVStorage&& rhs) noexcept
         : start(rhs.start), num_block(rhs.num_block) {
       rhs.start = nullptr;
     }
+    /// Move assignment. rhs is unstable after moving if this != &rhs
     IBBVStorage& operator=(IBBVStorage&& rhs) noexcept {
       if (this == &rhs) return *this;
       std::free(start);
@@ -261,6 +263,14 @@ protected:
       num_block = rhs.num_block;
       rhs.start = nullptr;
       return *this;
+    }
+
+    inline bool operator==(const IBBVStorage& rhs) const noexcept {
+      if (num_block != rhs.num_block) return false;
+      return std::memcmp(start, rhs.start, bytes_needed(num_block)) == 0;
+    }
+    inline bool operator!=(const IBBVStorage& rhs) const noexcept {
+      return !(*this == rhs);
     }
   };
 
@@ -1026,11 +1036,7 @@ public:
   }
 
   bool operator==(const IndexedBlockBitVector& rhs) const noexcept {
-    if (size() != rhs.size()) return false;
-    return std::memcmp(indexes.data(), rhs.indexes.data(),
-                       sizeof(index_t) * size()) == 0 &&
-           std::memcmp(blocks.data(), rhs.blocks.data(),
-                       sizeof(Block) * size()) == 0;
+    return storage == rhs.storage;
   }
 
   bool operator!=(const IndexedBlockBitVector& rhs) const noexcept {
