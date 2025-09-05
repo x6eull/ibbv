@@ -13,10 +13,9 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <immintrin.h>
 #include <iterator>
-#include <memory>
 #include <utility>
-#include <vector>
 
 #if IBBV_COUNT_OP
 #  include "Counter.h"
@@ -41,8 +40,8 @@ template <uint16_t BlockBits = 128> class IndexedBlockBitVector {
 public:
   template <size_t MaxTbvSize> friend class AdaptiveBitVector;
   using UnitType = uint64_t;
-  static constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
-  static constexpr uint16_t UnitsPerBlock = BlockBits / UnitBits;
+  static inline constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
+  static inline constexpr uint16_t UnitsPerBlock = BlockBits / UnitBits;
 
   struct Block {
     UnitType data[UnitsPerBlock];
@@ -121,104 +120,166 @@ public:
   using index_t = uint32_t;
 
 protected:
-  template <typename T, size_t Align, size_t Threshold>
-  class IbbvAllocator : public std::allocator<T> {
+  struct IBBVStorage {
   public:
-    template <class U> struct rebind {
-      using other = IbbvAllocator<U, Align, Threshold>;
-    };
+    static inline constexpr auto IndexSize = sizeof(index_t);
+    static inline constexpr auto BlockSize = sizeof(Block);
+    static inline constexpr auto IndexReservedBits = log2int<BlockBits>;
+    static inline constexpr index_t IndexValidBitsMask =
+        ~((1 << IndexReservedBits) - 1);
 
-    /// Removes default initialization behaviour.
-    template <class U> void construct(U* p) const noexcept {}
-    /// No destruction behaviour.
-    template <class U> void destroy(U* p) const noexcept {}
+    std::byte* start;
+    size_t num_block;
 
-    [[nodiscard]] T* allocate(std::size_t n) {
-      const auto nbytes = n * sizeof(T);
-      if (nbytes >= Threshold)
-        return reinterpret_cast<T*>(
-            ::operator new(nbytes, std::align_val_t{Align}));
-      else return reinterpret_cast<T*>(::operator new(nbytes));
+    static inline auto bytes_needed(size_t num_block) noexcept {
+      return num_block * (IndexSize + BlockSize);
+    }
+    /// Init storage. Ignore any data already exists.
+    /// All blocks are zeroed, but indexes are uninited.
+    inline void init_storage(size_t num_block) {
+      start =
+          reinterpret_cast<std::byte*>(std::malloc(bytes_needed(num_block)));
+      this->num_block = num_block;
+      std::memset(idx_at(0), 0, num_block * BlockSize);
     }
 
-    void deallocate(T* p, std::size_t n) const noexcept {
-      const auto nbytes = n * sizeof(T);
-      if (nbytes >= Threshold) ::operator delete(p, std::align_val_t{Align});
-      else ::operator delete(p);
+    static inline index_t* idx_at(std::byte* base, size_t pos) noexcept {
+      return reinterpret_cast<index_t*>(base) + pos;
+    }
+    inline index_t* idx_at(size_t pos) noexcept {
+      return idx_at(start, pos);
+    }
+    inline const index_t* idx_at(size_t pos) const noexcept {
+      return idx_at(start, pos);
+    }
+    static inline Block* blk_at(std::byte* base, size_t num_block,
+                                size_t pos) noexcept {
+      return reinterpret_cast<Block*>(idx_at(base, num_block)) + pos;
+    }
+    inline Block* blk_at(size_t pos) noexcept {
+      return blk_at(start, num_block, pos);
+    }
+    inline const Block* blk_at(size_t pos) const noexcept {
+      return blk_at(start, num_block, pos);
+    }
+
+    /// Shrink to specified num of blocks.
+    /// If new_num_block >= num_block, do nothing (don't throw).
+    inline void truncate(size_t new_num_block) {
+      if (new_num_block >= num_block) return;
+      std::memmove(idx_at(new_num_block), blk_at(0), new_num_block * BlockSize);
+      start = std::realloc(start, bytes_needed(new_num_block));
+      num_block = new_num_block;
+    }
+
+    inline size_t find_lower_bound(index_t target_index) const noexcept {
+      return std::lower_bound(idx_at(0), idx_at(num_block), target_index) -
+             idx_at(0);
+    }
+    /// Insert a new block with one bit set.
+    /// Requires: 0 <= pos <= num_block, and the block mustn't exists.
+    inline void insert(size_t pos, index_t value) {
+      // sadly, std::try_realloc doesn't exist.
+      // we have to assume that a new block is returned every time
+      std::byte* new_start = reinterpret_cast<std::byte*>(
+          std::malloc(bytes_needed(num_block + 1)));
+      std::memcpy(new_start, start, pos * IndexSize);
+      *idx_at(new_start, pos) = value & IndexValidBitsMask;
+      std::memcpy(idx_at(new_start, pos + 1), idx_at(pos),
+                  (num_block - pos) * IndexSize + pos * BlockSize);
+      ::new (blk_at(new_start, num_block + 1, pos))(Block)(value % BlockSize);
+      std::memcpy(blk_at(new_start, num_block + 1, pos + 1), blk_at(pos),
+                  (num_block - pos) * IndexSize + pos * BlockSize);
+      free(start);
+      start = new_start;
+      ++num_block;
+    }
+    /// Remove a block.
+    inline void remove(size_t pos) {
+      std::memmove(idx_at(pos), idx_at(pos + 1),
+                   (num_block - pos - 1) * IndexSize);
+      std::memmove(blk_at(pos), blk_at(pos + 1),
+                   (num_block - pos - 1) * BlockSize);
+      --num_block;
+      start = realloc(start, bytes_needed(num_block));
+    }
+
+    /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 16
+    /// (UB otherwise)
+    IBBVStorage(const index_t* value_start, const size_t value_count) noexcept {
+      const auto v_raw = _mm512_loadu_epi32(value_start);
+      /// clear lowest IndexReservedBits bits
+      const auto v_lowcleared = _mm512_slli_epi32(
+          _mm512_srli_epi32(v_raw, IndexReservedBits), IndexReservedBits);
+      alignas(__m512i) index_t idx_low_cleared[16];
+      _mm512_store_si512(idx_low_cleared, v_lowcleared);
+      /// rotate-shift right the whole vector by 1 element
+      const auto v_sr1 = _mm512_alignr_epi32(v_raw, v_raw, 1);
+      /// whether each idx is equal to the next idx
+      const auto m_eq = _mm512_mask_cmpeq_epi32_mask(
+          // the last valid idx shouldn't be compared (its next idx is unknown)
+          (1 << (value_count - 1)) - 1, v_raw, v_sr1);
+      /// num of idx that is equal to the next idx
+      const auto num_eq = popcnt(m_eq);
+      const auto num_unique_idx = value_count - num_eq;
+
+      init_storage(num_unique_idx);
+      index_t* cur_idx = idx_at(0);
+      Block* cur_blk = blk_at(0);
+      /// whether each idx is equal to the previous idx
+      const auto m_eq_sl1 = m_eq << 1;
+      for (size_t i = 0; i < value_count; i++) {
+        // if cur idx == prev idx, don't move to next idx/blk
+        cur_idx += m_eq_sl1 & (1 << i) ? 0 : 1;
+        cur_blk += m_eq_sl1 & (1 << i) ? 0 : 1;
+        *cur_idx = idx_low_cleared[i];
+        cur_blk->set(value_start[i] % BlockBits);
+      }
+    }
+    ~IBBVStorage() noexcept {
+      std::free(start);
+    }
+    IBBVStorage(const IBBVStorage& rhs) noexcept {
+      init_storage(rhs.num_block);
+      std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
+    }
+    IBBVStorage& operator=(const IBBVStorage& rhs) noexcept {
+      if (this == &rhs) return *this;
+      std::free(start);
+      init_storage(rhs.num_block);
+      std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
+      return *this;
+    }
+    IBBVStorage(IBBVStorage&& rhs) noexcept
+        : start(rhs.start), num_block(rhs.num_block) {
+      rhs.start = nullptr;
+    }
+    IBBVStorage& operator=(IBBVStorage&& rhs) noexcept {
+      if (this == &rhs) return *this;
+      std::free(start);
+      start = rhs.start;
+      num_block = rhs.num_block;
+      rhs.start = nullptr;
+      return *this;
     }
   };
 
-  using index_allocator = IbbvAllocator<index_t, 64, 64>;
-  using index_container = std::vector<index_t, index_allocator>;
-  using block_allocator =
-      IbbvAllocator<Block, 64, 64 / sizeof(index_t) * sizeof(Block)>;
-  using block_container = std::vector<Block, block_allocator>;
-  index_container indexes{};
-  block_container blocks{};
-  using index_iter_t = typename index_container::iterator;
-  using index_const_iter_t = typename index_container::const_iterator;
-  using block_iter_t = typename block_container::iterator;
-  using block_const_iter_t = typename block_container::const_iterator;
+  IBBVStorage storage;
 
   /// Returns # of blocks.
   _inline size_t size() const noexcept {
-    return indexes.size();
+    return storage.num_block;
   }
   _inline index_t index_at(size_t i) const noexcept {
-    return indexes[i];
+    return *storage.idx_at(i);
   }
   _inline Block& block_at(size_t i) noexcept {
-    return blocks[i];
+    return *storage.blk_at(i);
   }
   _inline const Block& block_at(size_t i) const noexcept {
-    return blocks[i];
-  }
-  _inline void truncate(size_t keep_count) noexcept {
-    indexes.resize(keep_count);
-    blocks.resize(keep_count);
-  }
-  template <typename... Args>
-  _inline void emplace_at(const index_iter_t& index_iter,
-                          const block_iter_t& block_iter, const index_t& ind,
-                          Args&&... blkArgs) noexcept {
-    indexes.emplace(index_iter, ind);
-    blocks.emplace(block_iter, std::forward<Args>(blkArgs)...);
-  }
-  template <typename... Args>
-  _inline void emplace_at(size_t i, const index_t& ind,
-                          Args&&... blkArgs) noexcept {
-    return emplace_at(indexes.cbegin() + i, blocks.cbegin() + i, ind,
-                      std::forward<Args>(blkArgs)...);
-  }
-  _inline block_const_iter_t get_block_iter(
-      const index_const_iter_t& it) const noexcept {
-    return blocks.cbegin() + (it - indexes.cbegin());
+    return *storage.blk_at(i);
   }
   mutable size_t last_used_pos{0};
-  inline std::pair<index_const_iter_t, block_const_iter_t> find_lower_bound(
-      index_t target_index) const noexcept {
-    if (empty()) return {indexes.cend(), blocks.cend()};
-    if (last_used_pos >= size()) last_used_pos = size() - 1;
-    const auto last_used_index_it = indexes.cbegin() + last_used_pos;
-    if (*last_used_index_it == target_index)
-      return {last_used_index_it, get_block_iter(last_used_index_it)};
-    else {
-      index_const_iter_t lbound_idx_it =
-          (target_index > *last_used_index_it)
-              ? std::lower_bound(last_used_index_it + 1, indexes.cend(),
-                                 target_index)
-              : std::lower_bound(indexes.cbegin(), last_used_index_it,
-                                 target_index);
-      last_used_pos = lbound_idx_it - indexes.cbegin();
-      return {lbound_idx_it, get_block_iter(lbound_idx_it)};
-    }
-  }
-  inline std::pair<index_iter_t, block_iter_t> find_lower_bound_mut(
-      index_t target_index) noexcept {
-    const auto [idx_it, blk_it] = find_lower_bound(target_index);
-    return {indexes.begin() + (idx_it - indexes.cbegin()),
-            blocks.begin() + (blk_it - blocks.cbegin())};
-  }
 
   // Static helper methods
 
@@ -768,9 +829,9 @@ public:
     index_t cur_pos;
 
   protected:
-    index_const_iter_t indexIt;
-    index_const_iter_t indexEnd;
-    block_const_iter_t blockIt;
+    const index_t* indexIt;
+    const index_t* indexEnd;
+    const Block* blockIt;
     unsigned char unit_index; // unit index in the current block
     unsigned char bit_index;  // bit index in the current unit
     bool end;
@@ -818,10 +879,11 @@ public:
     IndexedBlockBitVectorIterator(const IndexedBlockBitVector& vec,
                                   bool end = false)
         : // must be init to identify raw vector
-          indexEnd(vec.indexes.cend()), end(end | vec.empty()) {
+          indexEnd(vec.storage.idx_at(vec.storage.num_block)),
+          end(end | vec.empty()) {
       if (end) return;
-      indexIt = vec.indexes.cbegin();
-      blockIt = vec.blocks.cbegin();
+      indexIt = vec.storage.idx_at(0);
+      blockIt = vec.storage.blk_at(0);
       unit_index = 0;
       bit_index = 0;
       search();
@@ -876,7 +938,7 @@ public:
 
   /// Returns true if no bits are set.
   bool empty() const noexcept {
-    return indexes.empty();
+    return storage.num_block == 0;
   }
 
   /// Returns the count of bits set.

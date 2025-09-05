@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <immintrin.h>
 #include <type_traits>
@@ -222,6 +223,15 @@ template <> _inline int tzcnt<uint16_t>(uint16_t value) {
 template <> _inline int tzcnt<uint64_t>(uint64_t value) {
   return _tzcnt_u64(value);
 }
+
+// TODO use std::countr_zero (constexpr) in C++ 20
+template <size_t N>
+inline constexpr size_t log2int = []() {
+  static_assert((N & (N - 1)) == 0, "N must be an integer power of 2");
+  return -1;
+}();
+template <> inline constexpr size_t log2int<64> = 6;
+template <> inline constexpr size_t log2int<128> = 7;
 
 /// Returns true if all bits in v2 are set in v1. (that is, v1 contains v2)
 template <unsigned short BitWidth>
