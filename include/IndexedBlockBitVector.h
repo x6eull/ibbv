@@ -140,7 +140,7 @@ protected:
     }
     /// Init storage. Ignore any data already exists.
     /// All indexes and blocks are zero-inited.
-    inline void init_small_storage(size_t num_block) {
+    inline void init_small_storage(size_t num_block) noexcept {
       start = reinterpret_cast<std::byte*>(
           mi_zalloc_small(bytes_needed(num_block)));
       this->num_block = num_block;
@@ -148,7 +148,7 @@ protected:
 
     /// Init storage. Ignore any data already exists.
     /// All indexes and blocks are zero-inited.
-    inline void init_storage(size_t num_block) {
+    inline void init_storage(size_t num_block) noexcept {
       start = reinterpret_cast<std::byte*>(mi_zalloc(bytes_needed(num_block)));
       this->num_block = num_block;
     }
@@ -175,7 +175,7 @@ protected:
 
     /// Shrink to specified num of blocks.
     /// If new_num_block >= num_block, do nothing (don't throw).
-    inline void truncate(size_t new_num_block) {
+    inline void truncate(size_t new_num_block) noexcept {
       if (new_num_block >= num_block) return;
       std::memmove(idx_at(new_num_block), blk_at(0), new_num_block * BlockSize);
       start = reinterpret_cast<std::byte*>(
@@ -184,7 +184,7 @@ protected:
     }
     /// Extend to specified num of blocks. New indexes and blocks are uninited.
     /// If new_num_block <= num_block, do nothing (don't throw).
-    inline void extend(size_t new_num_block) {
+    inline void extend(size_t new_num_block) noexcept {
       if (new_num_block <= num_block) return;
       if (mi_expand(start, bytes_needed(new_num_block))) {
         std::memmove(blk_at(start, new_num_block, 0), blk_at(0),
@@ -207,7 +207,7 @@ protected:
     }
     /// Insert a new block with one bit set.
     /// Requires: 0 <= pos <= num_block, and the block mustn't exists.
-    inline void insert(size_t pos, index_t value) {
+    inline void insert(size_t pos, index_t value) noexcept {
       if (mi_expand(start, bytes_needed(num_block + 1))) {
         std::memmove(blk_at(start, num_block + 1, pos + 1), blk_at(pos),
                      (num_block - pos) * BlockSize);
@@ -232,7 +232,7 @@ protected:
       }
     }
     /// Remove a block.
-    inline void remove(size_t pos) {
+    inline void remove(size_t pos) noexcept {
       std::memmove(idx_at(pos), idx_at(pos + 1),
                    (num_block - pos - 1) * IndexSize + pos * BlockSize);
       std::memmove(reinterpret_cast<std::byte*>(idx_at(pos)) +
@@ -242,7 +242,7 @@ protected:
       start = reinterpret_cast<std::byte*>( // the pointer shouldn't change
           mi_expand(start, bytes_needed(num_block)));
     }
-    inline void clear() {
+    inline void clear() noexcept {
       mi_free(start);
       start = nullptr;
       num_block = 0;
@@ -388,7 +388,7 @@ protected:
       13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 
   // SIMD algorithms.
-  bool union_simd(const IndexedBlockBitVector& rhs) {
+  bool union_simd(const IndexedBlockBitVector& rhs) noexcept {
 #if IBBV_COUNT_OP
     // this_count, this_size, rhs_count, rhs_size, result_count, result_size
     static Counter<int, int, int, int, int, int> ctr{"union_simd"};
@@ -514,7 +514,7 @@ protected:
     return changed;
   }
 
-  bool intersect_simd(const IndexedBlockBitVector& rhs) {
+  bool intersect_simd(const IndexedBlockBitVector& rhs) noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
     size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
     bool changed = false;
@@ -628,7 +628,7 @@ protected:
     return changed;
   }
 
-  bool diff_simd(const IndexedBlockBitVector& rhs) {
+  bool diff_simd(const IndexedBlockBitVector& rhs) noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
     size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
     bool changed = false;
@@ -893,7 +893,7 @@ public:
     unsigned char bit_index;  // bit index in the current unit
     bool end;
     /// move to next unit, returns false if reached the end
-    void incr_unit() {
+    void incr_unit() noexcept {
       bit_index = 0;
       if (++unit_index == UnitsPerBlock) {
         // forward to next block
@@ -905,13 +905,13 @@ public:
       }
     }
     /// Increment the bit index (mark the current bit as visited).
-    void incr_bit() {
+    void incr_bit() noexcept {
       if (++bit_index == UnitBits)
         // forward to next unit
         incr_unit();
     }
     /// Start from current position and search for the next set bit
-    void search() {
+    void search() noexcept {
       while (!end) {
         auto mask = ~((static_cast<UnitType>(1) << bit_index) - 1);
         auto masked_unit = blockIt->data[unit_index] & mask;
@@ -926,7 +926,7 @@ public:
       }
     }
     /// Step out from the current position and search for the next set bit.
-    void forward() {
+    void forward() noexcept {
       incr_bit();
       search();
     }
@@ -934,7 +934,7 @@ public:
   public:
     IndexedBlockBitVectorIterator() = delete;
     IndexedBlockBitVectorIterator(const IndexedBlockBitVector& vec,
-                                  bool end = false)
+                                  bool end = false) noexcept
         : // must be init to identify raw vector
           indexEnd(vec.storage.idx_at(vec.storage.num_block)),
           end(end || vec.empty()) {
@@ -947,22 +947,22 @@ public:
     }
     DEFAULT_COPY_MOVE(IndexedBlockBitVectorIterator);
 
-    reference operator*() const {
+    reference operator*() const noexcept {
       return cur_pos;
     }
-    pointer operator->() const {
+    pointer operator->() const noexcept {
       return &cur_pos;
     }
-    IndexedBlockBitVectorIterator& operator++() {
+    IndexedBlockBitVectorIterator& operator++() noexcept {
       forward();
       return *this;
     }
-    IndexedBlockBitVectorIterator operator++(int) {
+    IndexedBlockBitVectorIterator operator++(int) noexcept {
       IndexedBlockBitVectorIterator temp = *this;
       ++*this;
       return temp;
     }
-    bool operator==(const IndexedBlockBitVectorIterator& other) const {
+    bool operator==(const IndexedBlockBitVectorIterator& other) const noexcept {
       return
           // created from the same vector, and
           indexEnd == other.indexEnd &&
@@ -971,7 +971,7 @@ public:
            ( // both not ended and pointing to the same position
                end == other.end && cur_pos == other.cur_pos));
     }
-    bool operator!=(const IndexedBlockBitVectorIterator& other) const {
+    bool operator!=(const IndexedBlockBitVectorIterator& other) const noexcept {
       return !(*this == other);
     }
   };
@@ -980,15 +980,15 @@ public:
   /// Returns an iterator to the beginning of this vector.
   /// NOTE: If you modify the vector after creating an iterator, the iterator
   /// is not stable and may cause UB if used.
-  iterator begin() const {
+  iterator begin() const noexcept {
     return iterator(*this);
   }
-  iterator end() const {
+  iterator end() const noexcept {
     return iterator(*this, true);
   }
 
   /// Return the first set bit in the bitmap.  Return -1 if no bits are set.
-  int32_t find_first() const {
+  int32_t find_first() const noexcept {
     if (empty()) return -1;
     return *begin();
   }
@@ -1091,7 +1091,7 @@ public:
 
   /// Inplace union with rhs.
   /// Returns true if `this` changed.
-  bool operator|=(const IndexedBlockBitVector& rhs) {
+  bool operator|=(const IndexedBlockBitVector& rhs) noexcept {
     return union_simd(rhs);
   }
 
@@ -1109,7 +1109,7 @@ public:
 
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
-  bool operator-=(const IndexedBlockBitVector& rhs) {
+  bool operator-=(const IndexedBlockBitVector& rhs) noexcept {
     return diff_simd(rhs);
   }
 
@@ -1119,7 +1119,8 @@ public:
 
 namespace std {
 template <> struct hash<ibbv::IndexedBlockBitVector<>> {
-  std::size_t operator()(const ibbv::IndexedBlockBitVector<>& s) const {
+  std::size_t operator()(
+      const ibbv::IndexedBlockBitVector<>& s) const noexcept {
     return ibbv::IndexedBlockBitVector<>::szudzik(
         s.count(),
         ibbv::IndexedBlockBitVector<>::szudzik(s.size(), s.find_first()));

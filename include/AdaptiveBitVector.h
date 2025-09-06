@@ -58,11 +58,11 @@ public:
     return rep.index();
   }
   /// For debugging. Use with caution.
-  __attribute__((used)) ibbv* get_ibbv() {
+  __attribute__((used)) ibbv* get_ibbv() noexcept {
     return std::get_if<ibbv>(&rep);
   }
   /// For debugging. Use with caution.
-  __attribute__((used)) tbv* get_tbv() {
+  __attribute__((used)) tbv* get_tbv() noexcept {
     return std::get_if<tbv>(&rep);
   }
   class AdaptiveBitVectorIterator {
@@ -76,7 +76,7 @@ public:
     using pointer = const index_t*;
     using reference = const index_t&;
     AdaptiveBitVectorIterator(const std::variant<tbv, ibbv>& vec,
-                              std::false_type)
+                              std::false_type) noexcept
         : it_rep(std::visit(
               [=](auto&& arg) {
                 return std::variant<typename tbv::iterator,
@@ -84,7 +84,7 @@ public:
               },
               vec)) {}
     AdaptiveBitVectorIterator(const std::variant<tbv, ibbv>& vec,
-                              std::true_type)
+                              std::true_type) noexcept
         : it_rep(std::visit(
               [=](auto&& arg) {
                 return std::variant<typename tbv::iterator,
@@ -92,33 +92,33 @@ public:
               },
               vec)) {}
 
-    reference operator*() const {
+    reference operator*() const noexcept {
       return std::visit([](auto&& arg) -> reference { return (*arg); }, it_rep);
     }
-    pointer operator->() const {
+    pointer operator->() const noexcept {
       return std::visit([](auto&& arg) -> pointer { return (&*arg); }, it_rep);
     }
-    AdaptiveBitVectorIterator& operator++() {
+    AdaptiveBitVectorIterator& operator++() noexcept {
       std::visit([](auto&& arg) { arg++; }, it_rep);
       return *this;
     }
-    AdaptiveBitVectorIterator operator++(int) {
+    AdaptiveBitVectorIterator operator++(int) noexcept {
       AdaptiveBitVectorIterator temp = *this;
       ++*this;
       return temp;
     }
-    bool operator==(const AdaptiveBitVectorIterator& other) const {
+    bool operator==(const AdaptiveBitVectorIterator& other) const noexcept {
       return it_rep == other.it_rep;
     }
-    bool operator!=(const AdaptiveBitVectorIterator& other) const {
+    bool operator!=(const AdaptiveBitVectorIterator& other) const noexcept {
       return !(*this == other);
     }
   };
   using iterator = AdaptiveBitVectorIterator;
-  auto begin() const {
+  auto begin() const noexcept {
     return iterator(rep, std::false_type());
   }
-  auto end() const {
+  auto end() const noexcept {
     return iterator(rep, std::true_type());
   }
   auto find_first() const noexcept {
@@ -318,7 +318,7 @@ public:
 
 namespace std {
 template <> struct hash<ibbv::AdaptiveBitVector<>> {
-  std::size_t operator()(const ibbv::AdaptiveBitVector<>& v) const {
+  std::size_t operator()(const ibbv::AdaptiveBitVector<>& v) const noexcept {
     return std::visit(
         [](auto&& arg) {
           return std::hash<std::decay_t<decltype(arg)>>{}(arg);
