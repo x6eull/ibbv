@@ -15,6 +15,7 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <cstring>
 #include <immintrin.h>
 #include <iterator>
+#include <mimalloc.h>
 #include <utility>
 
 #if IBBV_COUNT_OP
@@ -138,12 +139,18 @@ protected:
       return num_block * (IndexSize + BlockSize);
     }
     /// Init storage. Ignore any data already exists.
-    /// All blocks are zeroed, but indexes are uninited.
-    inline void init_storage(size_t num_block) {
-      start =
-          reinterpret_cast<std::byte*>(std::malloc(bytes_needed(num_block)));
+    /// All indexes and blocks are zero-inited.
+    inline void init_small_storage(size_t num_block) {
+      start = reinterpret_cast<std::byte*>(
+          mi_zalloc_small(bytes_needed(num_block)));
       this->num_block = num_block;
-      std::memset(blk_at(0), 0, num_block * BlockSize);
+    }
+
+    /// Init storage. Ignore any data already exists.
+    /// All indexes and blocks are zero-inited.
+    inline void init_storage(size_t num_block) {
+      start = reinterpret_cast<std::byte*>(mi_zalloc(bytes_needed(num_block)));
+      this->num_block = num_block;
     }
 
     static inline index_t* idx_at(std::byte* base, size_t pos) noexcept {
@@ -172,19 +179,26 @@ protected:
       if (new_num_block >= num_block) return;
       std::memmove(idx_at(new_num_block), blk_at(0), new_num_block * BlockSize);
       start = reinterpret_cast<std::byte*>(
-          std::realloc(start, bytes_needed(new_num_block)));
+          mi_expand(start, bytes_needed(new_num_block)));
       num_block = new_num_block;
     }
     /// Extend to specified num of blocks. New indexes and blocks are uninited.
     /// If new_num_block <= num_block, do nothing (don't throw).
     inline void extend(size_t new_num_block) {
       if (new_num_block <= num_block) return;
-      std::byte* new_start = reinterpret_cast<std::byte*>(
-          std::realloc(start, bytes_needed(new_num_block)));
-      std::memmove(blk_at(new_start, new_num_block, 0),
-                   blk_at(new_start, num_block, 0), num_block * BlockSize);
-      start = new_start;
-      num_block = new_num_block;
+      if (mi_expand(start, bytes_needed(new_num_block))) {
+        std::memmove(blk_at(start, new_num_block, 0), blk_at(0),
+                     num_block * BlockSize);
+        num_block = new_num_block;
+      } else {
+        std::byte* new_start = reinterpret_cast<std::byte*>(
+            mi_malloc(bytes_needed(new_num_block)));
+        std::memcpy(idx_at(new_start, 0), idx_at(0), num_block * IndexSize);
+        std::memcpy(blk_at(new_start, new_num_block, 0), blk_at(0),
+                    num_block * BlockSize);
+        start = new_start;
+        num_block = new_num_block;
+      }
     }
 
     inline size_t find_lower_bound(index_t target_index) const noexcept {
@@ -194,20 +208,28 @@ protected:
     /// Insert a new block with one bit set.
     /// Requires: 0 <= pos <= num_block, and the block mustn't exists.
     inline void insert(size_t pos, index_t value) {
-      // sadly, std::try_realloc doesn't exist.
-      // we have to assume that a new block is returned every time
-      std::byte* new_start = reinterpret_cast<std::byte*>(
-          std::malloc(bytes_needed(num_block + 1)));
-      std::memcpy(new_start, start, pos * IndexSize);
-      *idx_at(new_start, pos) = value & IndexValidBitsMask;
-      std::memcpy(idx_at(new_start, pos + 1), idx_at(pos),
-                  (num_block - pos) * IndexSize + pos * BlockSize);
-      ::new (blk_at(new_start, num_block + 1, pos))(Block)(value % BlockBits);
-      std::memcpy(blk_at(new_start, num_block + 1, pos + 1), blk_at(pos),
-                  (num_block - pos) * BlockSize);
-      std::free(start);
-      start = new_start;
-      ++num_block;
+      if (mi_expand(start, bytes_needed(num_block + 1))) {
+        std::memmove(blk_at(start, num_block + 1, pos + 1), blk_at(pos),
+                     (num_block - pos) * BlockSize);
+        ::new (blk_at(start, num_block + 1, pos))(Block)(value % BlockBits);
+        std::memmove(idx_at(pos + 1), idx_at(pos),
+                     (num_block - pos) * IndexSize + pos * BlockSize);
+        *idx_at(pos) = value & IndexValidBitsMask;
+        ++num_block;
+      } else {
+        std::byte* new_start = reinterpret_cast<std::byte*>(
+            mi_malloc(bytes_needed(num_block + 1)));
+        std::memcpy(new_start, start, pos * IndexSize);
+        *idx_at(new_start, pos) = value & IndexValidBitsMask;
+        std::memcpy(idx_at(new_start, pos + 1), idx_at(pos),
+                    (num_block - pos) * IndexSize + pos * BlockSize);
+        ::new (blk_at(new_start, num_block + 1, pos))(Block)(value % BlockBits);
+        std::memcpy(blk_at(new_start, num_block + 1, pos + 1), blk_at(pos),
+                    (num_block - pos) * BlockSize);
+        mi_free(start);
+        start = new_start;
+        ++num_block;
+      }
     }
     /// Remove a block.
     inline void remove(size_t pos) {
@@ -217,11 +239,11 @@ protected:
                        (num_block - pos - 1) * IndexSize + pos * BlockSize,
                    blk_at(pos + 1), (num_block - pos - 1) * BlockSize);
       --num_block;
-      start =
-          reinterpret_cast<std::byte*>(realloc(start, bytes_needed(num_block)));
+      start = reinterpret_cast<std::byte*>( // the pointer shouldn't change
+          mi_expand(start, bytes_needed(num_block)));
     }
     inline void clear() {
-      std::free(start);
+      mi_free(start);
       start = nullptr;
       num_block = 0;
     }
@@ -247,7 +269,7 @@ protected:
       const auto num_eq = popcnt(m_eq);
       const auto num_unique_idx = value_count - num_eq;
 
-      init_storage(num_unique_idx);
+      init_small_storage(num_unique_idx);
       index_t* cur_idx = idx_at(0) - 1;
       Block* cur_blk = blk_at(0) - 1;
       /// whether each idx is equal to the previous idx
@@ -261,7 +283,7 @@ protected:
       }
     }
     ~IBBVStorage() noexcept {
-      std::free(start);
+      mi_free(start);
     }
     IBBVStorage(const IBBVStorage& rhs) noexcept {
       init_storage(rhs.num_block);
@@ -269,7 +291,7 @@ protected:
     }
     IBBVStorage& operator=(const IBBVStorage& rhs) noexcept {
       if (this == &rhs) return *this;
-      std::free(start);
+      mi_free(start);
       init_storage(rhs.num_block);
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
       return *this;
@@ -282,7 +304,7 @@ protected:
     /// Move assignment. rhs is unstable after moving if this != &rhs
     IBBVStorage& operator=(IBBVStorage&& rhs) noexcept {
       if (this == &rhs) return *this;
-      std::free(start);
+      mi_free(start);
       start = rhs.start;
       num_block = rhs.num_block;
       rhs.start = nullptr;
@@ -377,8 +399,8 @@ protected:
     size_t lhs_i = 0, rhs_i = 0;
     bool changed = false;
     size_t extra_count = 0;
-    index_t* extra_indexes = (index_t*)std::malloc(sizeof(index_t) * rhs_size);
-    Block* extra_blocks = (Block*)std::malloc(sizeof(Block) * rhs_size);
+    index_t* extra_indexes = (index_t*)mi_mallocn(sizeof(index_t), rhs_size);
+    Block* extra_blocks = (Block*)mi_mallocn(sizeof(Block), rhs_size);
 
     alignas(64) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
     while (lhs_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
@@ -478,8 +500,8 @@ protected:
       }
       // else if src_i >= 0, they are already in place
     }
-    std::free(extra_indexes);
-    std::free(extra_blocks);
+    mi_free(extra_indexes);
+    mi_free(extra_blocks);
     if (rhs_remaining) { // remaining elements in rhs are always largest
       std::memcpy(&index_at(this_size + extra_count), &rhs.index_at(rhs_i),
                   sizeof(index_t) * (rhs_size - rhs_i));

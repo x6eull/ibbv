@@ -17,6 +17,9 @@ target_include_directories(ibbv INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
 )
 
+find_package(mimalloc 2.2 REQUIRED)
+target_link_libraries(ibbv INTERFACE mimalloc-static)
+
 install(TARGETS ibbv EXPORT ibbvTargets)
 install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/include/ DESTINATION include)
 install(EXPORT ibbvTargets
