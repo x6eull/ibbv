@@ -140,16 +140,16 @@ protected:
     }
     /// Init storage. Ignore any data already exists.
     /// All indexes and blocks are zero-inited.
-    inline void init_small_storage(size_t num_block) noexcept {
+    inline void init_small_storage_zeroed(size_t num_block) noexcept {
       start = reinterpret_cast<std::byte*>(
           mi_zalloc_small(bytes_needed(num_block)));
       this->num_block = num_block;
     }
 
     /// Init storage. Ignore any data already exists.
-    /// All indexes and blocks are zero-inited.
-    inline void init_storage(size_t num_block) noexcept {
-      start = reinterpret_cast<std::byte*>(mi_zalloc(bytes_needed(num_block)));
+    /// All indexes and blocks are uninitialized.
+    inline void alloc_storage(size_t num_block) noexcept {
+      start = reinterpret_cast<std::byte*>(mi_malloc(bytes_needed(num_block)));
       this->num_block = num_block;
     }
 
@@ -269,7 +269,7 @@ protected:
       const auto num_eq = popcnt(m_eq);
       const auto num_unique_idx = value_count - num_eq;
 
-      init_small_storage(num_unique_idx);
+      init_small_storage_zeroed(num_unique_idx);
       index_t* cur_idx = idx_at(0) - 1;
       Block* cur_blk = blk_at(0) - 1;
       /// whether each idx is equal to the previous idx
@@ -286,13 +286,13 @@ protected:
       mi_free(start);
     }
     IBBVStorage(const IBBVStorage& rhs) noexcept {
-      init_storage(rhs.num_block);
+      alloc_storage(rhs.num_block);
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
     }
     IBBVStorage& operator=(const IBBVStorage& rhs) noexcept {
       if (this == &rhs) return *this;
       mi_free(start);
-      init_storage(rhs.num_block);
+      alloc_storage(rhs.num_block);
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
       return *this;
     }
