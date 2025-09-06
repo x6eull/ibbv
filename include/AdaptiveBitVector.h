@@ -75,10 +75,20 @@ public:
     using difference_type = std::ptrdiff_t;
     using pointer = const index_t*;
     using reference = const index_t&;
-    AdaptiveBitVectorIterator(const decltype(rep)& vec, bool end = false)
+    AdaptiveBitVectorIterator(const std::variant<tbv, ibbv>& vec,
+                              std::false_type)
         : it_rep(std::visit(
               [=](auto&& arg) {
-                return decltype(it_rep){end ? arg.end() : arg.begin()};
+                return std::variant<typename tbv::iterator,
+                                    typename ibbv::iterator>{arg.begin()};
+              },
+              vec)) {}
+    AdaptiveBitVectorIterator(const std::variant<tbv, ibbv>& vec,
+                              std::true_type)
+        : it_rep(std::visit(
+              [=](auto&& arg) {
+                return std::variant<typename tbv::iterator,
+                                    typename ibbv::iterator>{arg.end()};
               },
               vec)) {}
 
@@ -106,10 +116,10 @@ public:
   };
   using iterator = AdaptiveBitVectorIterator;
   auto begin() const {
-    return iterator(rep);
+    return iterator(rep, std::false_type());
   }
   auto end() const {
-    return iterator(rep, true);
+    return iterator(rep, std::true_type());
   }
   auto find_first() const noexcept {
     return std::visit([](auto&& arg) { return arg.find_first(); }, rep);
@@ -317,3 +327,11 @@ template <> struct hash<ibbv::AdaptiveBitVector<>> {
   }
 };
 } // namespace std
+
+static_assert(std::is_nothrow_move_constructible<ibbv::AdaptiveBitVector<>>());
+static_assert(std::is_nothrow_move_constructible<
+              ibbv::AdaptiveBitVector<>::AdaptiveBitVectorIterator>());
+static_assert(
+    std::is_nothrow_move_constructible<ibbv::IndexedBlockBitVector<>>());
+static_assert(
+    std::is_nothrow_move_constructible<ibbv::TinyBitVector<int, 1>>());

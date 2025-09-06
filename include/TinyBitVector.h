@@ -94,22 +94,23 @@ public:
   /// Expand tbv to ibbv.
   inline auto expand() const noexcept {
     return IndexedBlockBitVector<>(
-        &*data.cbegin(), static_cast<size_t>(data_end - data.cbegin()));
+        static_cast<const index_t*>(data.cbegin()),
+        static_cast<size_t>(data_end - data.cbegin()));
   }
 
   /// Expand tbv to ibbv.
   inline auto expand(
       std::optional<IndexedBlockBitVector<>>& target) const noexcept {
-    target.emplace(&*data.cbegin(),
+    target.emplace(static_cast<const index_t*>(data.cbegin()),
                    static_cast<size_t>(data_end - data.cbegin()));
   }
 
 public:
-  inline int32_t find_first() const {
+  inline int32_t find_first() const noexcept {
     if (empty()) return -1;
     return *begin();
   }
-  inline int32_t find_last() const {
+  inline int32_t find_last() const noexcept {
     if (empty()) return -1;
     return *std::prev(end());
   }
@@ -223,12 +224,13 @@ public:
         std::set_intersection(begin(), end(), rhs.begin(), rhs.end(), begin()));
     return count() != prev_count;
   }
-  void diff_into_this(const TinyBitVector& lhs, const TinyBitVector& rhs) {
+  void diff_into_this(const TinyBitVector& lhs,
+                      const TinyBitVector& rhs) noexcept {
     resize_to(std::set_difference(lhs.begin(), lhs.end(), rhs.begin(),
                                   rhs.end(), begin()));
   }
   void diff_into_this(const TinyBitVector& lhs,
-                      const IndexedBlockBitVector<>& rhs) {
+                      const IndexedBlockBitVector<>& rhs) noexcept {
     resize_to(std::copy_if(lhs.begin(), lhs.end(), begin(),
                            [&](const index_t v) { return !rhs.test(v); }));
   }

@@ -937,7 +937,7 @@ public:
                                   bool end = false)
         : // must be init to identify raw vector
           indexEnd(vec.storage.idx_at(vec.storage.num_block)),
-          end(end | vec.empty()) {
+          end(end || vec.empty()) {
       if (end) return;
       indexIt = vec.storage.idx_at(0);
       blockIt = vec.storage.blk_at(0);
