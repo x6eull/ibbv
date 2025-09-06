@@ -226,20 +226,21 @@ protected:
       num_block = 0;
     }
 
-    /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 16
+    /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 8
     /// (UB otherwise)
     __attribute__((no_sanitize("address"))) IBBVStorage(
         const index_t* value_start, const size_t value_count) noexcept {
-      const auto v_raw = _mm512_loadu_epi32(value_start);
+      const auto v_raw = _mm256_loadu_epi32(value_start);
       /// clear lowest IndexReservedBits bits
-      const auto v_lowcleared = _mm512_slli_epi32(
-          _mm512_srli_epi32(v_raw, IndexReservedBits), IndexReservedBits);
-      alignas(__m512i) index_t idx_low_cleared[16];
-      _mm512_store_si512(idx_low_cleared, v_lowcleared);
+      const auto v_lowcleared = _mm256_slli_epi32(
+          _mm256_srli_epi32(v_raw, IndexReservedBits), IndexReservedBits);
+      alignas(__m256i) index_t idx_low_cleared[8];
+      _mm256_store_si256(reinterpret_cast<__m256i*>(idx_low_cleared),
+                         v_lowcleared);
       /// rotate-shift right the whole vector by 1 element
-      const auto v_sr1 = _mm512_alignr_epi32(v_lowcleared, v_lowcleared, 1);
+      const auto v_sr1 = _mm256_alignr_epi32(v_lowcleared, v_lowcleared, 1);
       /// whether each idx is equal to the next idx
-      const auto m_eq = _mm512_mask_cmpeq_epi32_mask(
+      const auto m_eq = _mm256_mask_cmpeq_epi32_mask(
           // the last valid idx shouldn't be compared (its next idx is unknown)
           (1 << (value_count - 1)) - 1, v_lowcleared, v_sr1);
       /// num of idx that is equal to the next idx
