@@ -53,8 +53,17 @@ protected:
                 unmatch_block)
 
 public:
-  auto impl_type() const noexcept {
+  /// For debugging. Use with caution.
+  __attribute__((used)) auto impl_type() const noexcept {
     return rep.index();
+  }
+  /// For debugging. Use with caution.
+  __attribute__((used)) ibbv* get_ibbv() {
+    return std::get_if<ibbv>(&rep);
+  }
+  /// For debugging. Use with caution.
+  __attribute__((used)) tbv* get_tbv() {
+    return std::get_if<tbv>(&rep);
   }
   class AdaptiveBitVectorIterator {
   protected:
@@ -199,6 +208,11 @@ public:
         },
         {
           // tbv |= ibbv
+          if (lptr->empty()) {
+            if (rptr->empty()) return false;
+            rep.template emplace<ibbv>(*rptr);
+            return true;
+          }
           auto& new_ibbv =
               rep.template emplace<ibbv>(std::move(lptr->expand()));
           return new_ibbv |= *rptr;
@@ -243,7 +257,7 @@ public:
     IFE_CASE(
         rep, rhs.rep, { return lptr->inplace_diff(*rptr); },
         { return lptr->inplace_diff(*rptr); },
-        {
+        { // ibbv -= tbv
           bool changed = false;
           for (const auto i : *rptr) {
             changed |= lptr->test(i);

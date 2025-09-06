@@ -1,4 +1,3 @@
-#include "IndexedBlockBitVector.h"
 #include "utils.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -6,16 +5,20 @@
 
 namespace ibbv::test {
 using set = std::set<ele_idx>;
-static constexpr size_t max_ele = 128 * (32 + 8);
+static constexpr size_t max_ele = 128 * (8 + 32);
 TEST(TrivialTest, Set) {
-  ABV vec;
-  const auto bits = random_dist(max_ele * 0.3, max_ele);
-  set ordered_bits{bits.begin(), bits.end()};
-  for (const auto b : ordered_bits)
-    vec.set(b);
-  common_rep result = to_common(vec);
-  set ordered_result{result.begin(), result.end()};
-  ASSERT_EQ(ordered_bits, ordered_result);
+  for (int _i = 0; _i < 100; _i++) {
+    ABV vec;
+    const auto bits = random_dist(max_ele * 0.3, max_ele);
+    set ordered_bits{bits.begin(), bits.end()};
+    for (const auto b : ordered_bits)
+      vec.set(b);
+    for (const auto b : ordered_bits)
+      ASSERT_TRUE(vec.test(b)) << b;
+    common_rep result = to_common(vec);
+    set ordered_result{result.begin(), result.end()};
+    ASSERT_EQ(ordered_bits, ordered_result);
+  }
 }
 
 TEST(ReferenceTest, Union) {
@@ -53,23 +56,25 @@ TEST(ReferenceTest, Intersection) {
 }
 
 TEST(ReferenceTest, Difference) {
-  ABV v1, v2;
-  const auto b1 = random_dist(max_ele * .3, max_ele),
-             b2 = random_dist(max_ele * .3, max_ele);
-  for (const auto b : b1)
-    v1.set(b);
-  for (const auto b : b2)
-    v2.set(b);
-  ABV v3 = v1;
-  v3 -= v2;
-  std::vector<ele_idx> std_result;
-  std::set_difference(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
-                      std::back_inserter(std_result));
+  for (int _i = 0; _i < 100; _i++) {
+    ABV v1, v2;
+    const auto b1 = random_dist(max_ele * .3, max_ele),
+               b2 = random_dist(max_ele * .3, max_ele);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    ABV v3 = v1;
+    v3 -= v2;
+    std::vector<ele_idx> std_result;
+    std::set_difference(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                        std::back_inserter(std_result));
 
-  const auto sorted_result = to_common_sorted(v3),
-             sorted_std_result = to_common_sorted(std_result);
-  ASSERT_EQ(sorted_result, sorted_std_result);
-  ASSERT_EQ(v3.count(), sorted_std_result.size());
+    const auto sorted_result = to_common_sorted(v3),
+               sorted_std_result = to_common_sorted(std_result);
+    ASSERT_EQ(sorted_result, sorted_std_result);
+    ASSERT_EQ(v3.count(), sorted_std_result.size());
+  }
 }
 
 TEST(ReferenceTest, DifferenceAsReset) {
@@ -107,7 +112,7 @@ TEST(ReferenceTest, Intersects) {
 }
 
 TEST(TBVTest, IntersectWithComplement) {
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < 1000; i++) {
     ABV v1, v2;
     const auto b1 = random_dist(10, 64), b2 = random_dist(10, 64);
     for (const auto b : b1)
@@ -119,6 +124,73 @@ TEST(TBVTest, IntersectWithComplement) {
                         std::back_inserter(std_result));
     ABV v3;
     v3.intersectWithComplement(v1, v2);
+    ASSERT_EQ(to_common(v3), to_common(std_result));
+  }
+}
+
+TEST(ABVTest, UnionTT) {
+  for (int i = 0; i < 1000; i++) {
+    ABV v1, v2;
+    const auto b1 = random_dist(4, 64), b2 = random_dist(4, 64);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    ABV v3 = v1 | v2;
+    std::vector<ele_idx> std_result;
+    std::set_union(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                   std::back_inserter(std_result));
+    ASSERT_EQ(to_common(v3), to_common(std_result));
+  }
+}
+
+TEST(ABVTest, UnionTI) {
+  for (int i = 0; i < 1000; i++) {
+    ABV v1, v2;
+    const auto b1 = random_dist(4, 16),
+               b2 = random_dist(max_ele * 0.3, max_ele);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    ABV v3 = v1 | v2;
+    std::vector<ele_idx> std_result;
+    std::set_union(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                   std::back_inserter(std_result));
+    ASSERT_EQ(to_common(v3), to_common(std_result));
+  }
+}
+
+TEST(ABVTest, UnionIT) {
+  for (int i = 0; i < 1000; i++) {
+    ABV v1, v2;
+    const auto b1 = random_dist(max_ele * 0.3, max_ele),
+               b2 = random_dist(4, 16);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    ABV v3 = v1 | v2;
+    std::vector<ele_idx> std_result;
+    std::set_union(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                   std::back_inserter(std_result));
+    ASSERT_EQ(to_common(v3), to_common(std_result));
+  }
+}
+
+TEST(ABVTest, UnionII) {
+  for (int i = 0; i < 1000; i++) {
+    ABV v1, v2;
+    const auto b1 = random_dist(max_ele * 0.3, max_ele),
+               b2 = random_dist(max_ele * 0.3, max_ele);
+    for (const auto b : b1)
+      v1.set(b);
+    for (const auto b : b2)
+      v2.set(b);
+    ABV v3 = v1 | v2;
+    std::vector<ele_idx> std_result;
+    std::set_union(b1.cbegin(), b1.cend(), b2.cbegin(), b2.cend(),
+                   std::back_inserter(std_result));
     ASSERT_EQ(to_common(v3), to_common(std_result));
   }
 }

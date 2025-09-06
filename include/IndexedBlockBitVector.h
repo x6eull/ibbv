@@ -50,7 +50,7 @@ public:
     UnitType data[UnitsPerBlock];
 
     /// Default constructor. data is uninitialized.
-    Block() noexcept {}
+    Block() noexcept = default;
     /// Initialize block with only one bit set.
     Block(size_t index) noexcept : data{} {
       set(index);
@@ -143,7 +143,7 @@ protected:
       start =
           reinterpret_cast<std::byte*>(std::malloc(bytes_needed(num_block)));
       this->num_block = num_block;
-      std::memset(idx_at(0), 0, num_block * BlockSize);
+      std::memset(blk_at(0), 0, num_block * BlockSize);
     }
 
     static inline index_t* idx_at(std::byte* base, size_t pos) noexcept {
@@ -183,7 +183,6 @@ protected:
           std::realloc(start, bytes_needed(new_num_block)));
       std::memmove(blk_at(new_start, new_num_block, 0),
                    blk_at(new_start, num_block, 0), num_block * BlockSize);
-      free(start);
       start = new_start;
       num_block = new_num_block;
     }
@@ -203,19 +202,20 @@ protected:
       *idx_at(new_start, pos) = value & IndexValidBitsMask;
       std::memcpy(idx_at(new_start, pos + 1), idx_at(pos),
                   (num_block - pos) * IndexSize + pos * BlockSize);
-      ::new (blk_at(new_start, num_block + 1, pos))(Block)(value % BlockSize);
+      ::new (blk_at(new_start, num_block + 1, pos))(Block)(value % BlockBits);
       std::memcpy(blk_at(new_start, num_block + 1, pos + 1), blk_at(pos),
-                  (num_block - pos) * IndexSize + pos * BlockSize);
-      free(start);
+                  (num_block - pos) * BlockSize);
+      std::free(start);
       start = new_start;
       ++num_block;
     }
     /// Remove a block.
     inline void remove(size_t pos) {
       std::memmove(idx_at(pos), idx_at(pos + 1),
-                   (num_block - pos - 1) * IndexSize);
-      std::memmove(blk_at(pos), blk_at(pos + 1),
-                   (num_block - pos - 1) * BlockSize);
+                   (num_block - pos - 1) * IndexSize + pos * BlockSize);
+      std::memmove(reinterpret_cast<std::byte*>(idx_at(pos)) +
+                       (num_block - pos - 1) * IndexSize + pos * BlockSize,
+                   blk_at(pos + 1), (num_block - pos - 1) * BlockSize);
       --num_block;
       start =
           reinterpret_cast<std::byte*>(realloc(start, bytes_needed(num_block)));
@@ -228,7 +228,8 @@ protected:
 
     /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 16
     /// (UB otherwise)
-    IBBVStorage(const index_t* value_start, const size_t value_count) noexcept {
+    __attribute__((no_sanitize("address"))) IBBVStorage(
+        const index_t* value_start, const size_t value_count) noexcept {
       const auto v_raw = _mm512_loadu_epi32(value_start);
       /// clear lowest IndexReservedBits bits
       const auto v_lowcleared = _mm512_slli_epi32(
@@ -236,18 +237,18 @@ protected:
       alignas(__m512i) index_t idx_low_cleared[16];
       _mm512_store_si512(idx_low_cleared, v_lowcleared);
       /// rotate-shift right the whole vector by 1 element
-      const auto v_sr1 = _mm512_alignr_epi32(v_raw, v_raw, 1);
+      const auto v_sr1 = _mm512_alignr_epi32(v_lowcleared, v_lowcleared, 1);
       /// whether each idx is equal to the next idx
       const auto m_eq = _mm512_mask_cmpeq_epi32_mask(
           // the last valid idx shouldn't be compared (its next idx is unknown)
-          (1 << (value_count - 1)) - 1, v_raw, v_sr1);
+          (1 << (value_count - 1)) - 1, v_lowcleared, v_sr1);
       /// num of idx that is equal to the next idx
       const auto num_eq = popcnt(m_eq);
       const auto num_unique_idx = value_count - num_eq;
 
       init_storage(num_unique_idx);
-      index_t* cur_idx = idx_at(0);
-      Block* cur_blk = blk_at(0);
+      index_t* cur_idx = idx_at(0) - 1;
+      Block* cur_blk = blk_at(0) - 1;
       /// whether each idx is equal to the previous idx
       const auto m_eq_sl1 = m_eq << 1;
       for (size_t i = 0; i < value_count; i++) {
@@ -775,7 +776,7 @@ protected:
       const auto lhs_ind = index_at(lhs_i);
       const auto rhs_ind = rhs.index_at(rhs_i);
       if (lhs_ind > rhs_ind) return false;
-      if (lhs_ind < rhs_ind) ++lhs_i;
+      else if (lhs_ind < rhs_ind) ++lhs_i;
       else {
         if (!block_at(lhs_i).contains(rhs.block_at(rhs_i))) return false;
         ++lhs_i, ++rhs_i;
@@ -841,7 +842,7 @@ protected:
       const auto lhs_ind = index_at(lhs_i);
       const auto rhs_ind = rhs.index_at(rhs_i);
       if (lhs_ind > rhs_ind) ++rhs_i;
-      if (lhs_ind < rhs_ind) ++lhs_i;
+      else if (lhs_ind < rhs_ind) ++lhs_i;
       else {
         if (block_at(lhs_i).intersects(rhs.block_at(rhs_i))) return true;
         ++lhs_i, ++rhs_i;

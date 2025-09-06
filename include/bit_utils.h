@@ -197,6 +197,9 @@ template <unsigned short BitWidth> _inline bool testz(const void* addr) {
 template <typename T> _inline int popcnt(T value) {
   UNSUPPORTED_TYPE
 }
+template <> _inline int popcnt<uint16_t>(uint16_t value) {
+  return _mm_popcnt_u32(value);
+}
 template <> _inline int popcnt<uint32_t>(uint32_t value) {
   return _mm_popcnt_u32(value);
 }

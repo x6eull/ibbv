@@ -91,28 +91,17 @@ public:
   inline void clear() noexcept {
     resize_to(begin());
   }
+  /// Expand tbv to ibbv.
+  inline auto expand() const noexcept {
+    return IndexedBlockBitVector<>(
+        &*data.cbegin(), static_cast<size_t>(data_end - data.cbegin()));
+  }
 
-  template <typename ForwardIt>
-  static inline std::optional<IndexedBlockBitVector<>> expand(
-      std::optional<IndexedBlockBitVector<>>& expanded, const ForwardIt& begin,
-      const ForwardIt& end) noexcept {
-    expanded.emplace();
-    for (auto it = begin; it != end; ++it)
-      expanded->set(*it);
-    return expanded;
-  }
-  template <typename ForwardIt>
-  static inline std::optional<IndexedBlockBitVector<>> expand(
-      const ForwardIt& begin, const ForwardIt& end) noexcept {
-    std::optional<IndexedBlockBitVector<>> expanded;
-    return expand(expanded, begin, end);
-  }
-  inline IndexedBlockBitVector<> expand() const noexcept {
-    return expand(begin(), end()).value();
-  }
-  inline std::optional<IndexedBlockBitVector<>> expand(
-      std::optional<IndexedBlockBitVector<>>& expanded) const noexcept {
-    return expand(expanded, begin(), end());
+  /// Expand tbv to ibbv.
+  inline auto expand(
+      std::optional<IndexedBlockBitVector<>>& target) const noexcept {
+    target.emplace(&*data.cbegin(),
+                   static_cast<size_t>(data_end - data.cbegin()));
   }
 
 public:
@@ -211,7 +200,7 @@ public:
         std::set_union(begin(), end(), rhs.begin(), rhs.end(), tmp.begin()));
     const size_t new_count = tmp_end - tmp.cbegin();
     if (new_count > MAX_SIZE) {
-      expand(expanded, tmp.cbegin(), tmp_end);
+      expanded.emplace(static_cast<const index_t*>(tmp.cbegin()), new_count);
       return true;
     } else {
       resize_to(std::copy(tmp.cbegin(), tmp_end, begin()));

@@ -18,7 +18,7 @@ constexpr inline unsigned short BlockSize = 128;
 using ABV = ibbv::AdaptiveBitVector<>;
 using SBV = llvm::SparseBitVector<BlockSize>;
 
-static const auto global_seed = []() {
+static const auto global_seed = []() -> long int {
   const auto result = std::random_device{}();
   std::cout << "random seed: " << result << std::endl;
   return result;

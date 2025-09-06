@@ -24,6 +24,8 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 add_executable(ibbv_test test.cpp)
+# target_compile_options(ibbv_test PRIVATE -fsanitize=address)
+# target_link_options(ibbv_test PRIVATE -fsanitize=address)
 target_link_libraries(ibbv_test ibbv GTest::gtest_main)
 
 include(GoogleTest)
