@@ -16,6 +16,7 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <immintrin.h>
 #include <iterator>
 #include <mimalloc.h>
+#include <type_traits>
 #include <utility>
 
 #if IBBV_COUNT_OP
@@ -883,78 +884,80 @@ public:
     using difference_type = std::ptrdiff_t;
     using pointer = const index_t*;
     using reference = const index_t&;
-    index_t cur_pos;
 
   protected:
-    const index_t* indexIt;
-    const index_t* indexEnd;
-    const Block* blockIt;
-    unsigned char unit_index; // unit index in the current block
-    unsigned char bit_index;  // bit index in the current unit
-    bool end;
-    /// move to next unit, returns false if reached the end
-    void incr_unit() noexcept {
+    const index_t* idx_it;
+    const Block* blk_it;
+    value_type cur_pos;
+    /// unit index in the current block.
+    unsigned char unit_index;
+    /// bit index in the current unit.
+    unsigned char bit_index;
+
+    /// Move to next unit, returns true if move to next block
+    bool incr_unit() noexcept {
       bit_index = 0;
       if (++unit_index == UnitsPerBlock) {
         // forward to next block
         unit_index = 0;
-        ++indexIt, ++blockIt;
-        if (indexIt == indexEnd)
-          // reached the end
-          end = true;
+        ++idx_it, ++blk_it;
+        return true;
       }
+      return false;
     }
     /// Increment the bit index (mark the current bit as visited).
-    void incr_bit() noexcept {
+    /// Returns true if move to next block
+    bool incr_bit() noexcept {
       if (++bit_index == UnitBits)
         // forward to next unit
-        incr_unit();
+        return incr_unit();
+      return false;
     }
     /// Start from current position and search for the next set bit
-    void search() noexcept {
-      while (!end) {
+    void search(bool is_new_block = false) noexcept {
+      while (true) {
         auto mask = ~((static_cast<UnitType>(1) << bit_index) - 1);
-        auto masked_unit = blockIt->data[unit_index] & mask;
+        auto masked_unit = blk_it->data[unit_index] & mask;
         auto tz_count = ibbv::utils::tzcnt(masked_unit);
         if (tz_count < UnitBits) {
           // found a set bit
           bit_index = tz_count;
-          cur_pos = *indexIt + unit_index * UnitBits + bit_index;
+          cur_pos = *idx_it + unit_index * UnitBits + bit_index;
           return;
-        } else // move to next unit
-          incr_unit();
+        } else if (incr_unit()) { // move to next unit
+          if (is_new_block) {     // An empty block? we've exceeded the end
+            --idx_it;
+            --blk_it;
+            return;
+          } else is_new_block = true; // we moved to a new block
+        }
       }
-    }
-    /// Step out from the current position and search for the next set bit.
-    void forward() noexcept {
-      incr_bit();
-      search();
     }
 
   public:
     IndexedBlockBitVectorIterator() = delete;
+    /// Construct a iterator which points to the begin.
     IndexedBlockBitVectorIterator(const IndexedBlockBitVector& vec,
-                                  bool end = false) noexcept
-        : // must be init to identify raw vector
-          indexEnd(vec.storage.idx_at(vec.storage.num_block)),
-          end(end || vec.empty()) {
-      if (end) return;
-      indexIt = vec.storage.idx_at(0);
-      blockIt = vec.storage.blk_at(0);
+                                  std::false_type) noexcept {
+      idx_it = vec.storage.idx_at(0);
+      blk_it = vec.storage.blk_at(0);
       unit_index = 0;
       bit_index = 0;
-      search();
+      search(true);
     }
+    /// Construct a iterator which points to the end.
+    IndexedBlockBitVectorIterator(const IndexedBlockBitVector& vec,
+                                  std::true_type) noexcept
+        : idx_it{vec.storage.idx_at(vec.storage.num_block)} {}
     DEFAULT_COPY_MOVE(IndexedBlockBitVectorIterator);
 
-    reference operator*() const noexcept {
+    value_type operator*() const noexcept {
       return cur_pos;
     }
-    pointer operator->() const noexcept {
-      return &cur_pos;
-    }
     IndexedBlockBitVectorIterator& operator++() noexcept {
-      forward();
+      // Forward max 1 blk.
+      bool moved = incr_bit();
+      search(moved);
       return *this;
     }
     IndexedBlockBitVectorIterator operator++(int) noexcept {
@@ -963,13 +966,7 @@ public:
       return temp;
     }
     bool operator==(const IndexedBlockBitVectorIterator& other) const noexcept {
-      return
-          // created from the same vector, and
-          indexEnd == other.indexEnd &&
-          (( // both ended, or
-               end && other.end) ||
-           ( // both not ended and pointing to the same position
-               end == other.end && cur_pos == other.cur_pos));
+      return idx_it == other.idx_it;
     }
     bool operator!=(const IndexedBlockBitVectorIterator& other) const noexcept {
       return !(*this == other);
@@ -981,10 +978,10 @@ public:
   /// NOTE: If you modify the vector after creating an iterator, the iterator
   /// is not stable and may cause UB if used.
   iterator begin() const noexcept {
-    return iterator(*this);
+    return iterator(*this, std::false_type());
   }
   iterator end() const noexcept {
-    return iterator(*this, true);
+    return iterator(*this, std::true_type());
   }
 
   /// Return the first set bit in the bitmap.  Return -1 if no bits are set.

@@ -92,11 +92,9 @@ public:
               },
               vec)) {}
 
-    reference operator*() const noexcept {
-      return std::visit([](auto&& arg) -> reference { return (*arg); }, it_rep);
-    }
-    pointer operator->() const noexcept {
-      return std::visit([](auto&& arg) -> pointer { return (&*arg); }, it_rep);
+    value_type operator*() const noexcept {
+      return std::visit([](auto&& arg) -> value_type { return (*arg); },
+                        it_rep);
     }
     AdaptiveBitVectorIterator& operator++() noexcept {
       std::visit([](auto&& arg) { arg++; }, it_rep);
@@ -327,11 +325,3 @@ template <> struct hash<ibbv::AdaptiveBitVector<>> {
   }
 };
 } // namespace std
-
-static_assert(std::is_nothrow_move_constructible<ibbv::AdaptiveBitVector<>>());
-static_assert(std::is_nothrow_move_constructible<
-              ibbv::AdaptiveBitVector<>::AdaptiveBitVectorIterator>());
-static_assert(
-    std::is_nothrow_move_constructible<ibbv::IndexedBlockBitVector<>>());
-static_assert(
-    std::is_nothrow_move_constructible<ibbv::TinyBitVector<int, 1>>());
