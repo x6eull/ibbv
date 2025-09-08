@@ -878,6 +878,8 @@ protected:
   // Public interfaces
 public:
   class IndexedBlockBitVectorIterator {
+    template <size_t> friend class AdaptiveBitVector;
+
   public:
     using iterator_category = std::input_iterator_tag;
     using value_type = index_t;
@@ -914,7 +916,8 @@ public:
       return false;
     }
     /// Start from current position and search for the next set bit
-    void search(bool is_new_block = false) noexcept {
+    __attribute__((no_sanitize("address"))) void search(
+        bool is_new_block = false) noexcept {
       while (true) {
         auto mask = ~((static_cast<UnitType>(1) << bit_index) - 1);
         auto masked_unit = blk_it->data[unit_index] & mask;

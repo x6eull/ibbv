@@ -105,8 +105,14 @@ public:
       ++*this;
       return temp;
     }
+    /// Compare whether two iterators are equal.
+    /// UB if comparing iterators with different representations.
     bool operator==(const AdaptiveBitVectorIterator& other) const noexcept {
-      return it_rep == other.it_rep;
+      static_assert(
+          std::is_convertible_v<typename tbv::iterator, index_t const*>);
+      static_assert(offsetof(ibbv::iterator, idx_it) == 0);
+      return *reinterpret_cast<index_t const* const*>(&it_rep) ==
+             *reinterpret_cast<index_t const* const*>(&other.it_rep);
     }
     bool operator!=(const AdaptiveBitVectorIterator& other) const noexcept {
       return !(*this == other);
