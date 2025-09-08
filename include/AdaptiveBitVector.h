@@ -257,10 +257,8 @@ public:
         },
         {
           // ibbv &= tbv
-          tbv new_rep{*rptr};
-          const auto result = new_rep.inplace_intersect(*lptr);
-          rep.template emplace<tbv>(std::move(new_rep));
-          return result;
+          ibbv temp_ibbv = std::move(*lptr); // save *lptr
+          return rep.template emplace<tbv>(*rptr).inplace_intersect(temp_ibbv);
         },
         { return *lptr &= *rptr; })
   }
@@ -273,10 +271,8 @@ public:
         { return lptr->inplace_diff(*rptr); },
         { // ibbv -= tbv
           bool changed = false;
-          for (const auto i : *rptr) {
-            changed |= lptr->test(i);
-            lptr->reset(i);
-          }
+          for (const auto i : *rptr)
+            changed |= lptr->test_and_reset(i);
           return changed;
         },
         { return *lptr -= *rptr; })
@@ -301,17 +297,13 @@ public:
           for (const auto i : *rptr)
             new_rep.reset(i);
         },
-        {
+        { // ibbv -= ibbv (may produce tbv)
           auto& new_rep = rep.template emplace<ibbv>(*lptr);
           new_rep -= *rptr;
           const auto new_count = new_rep.count();
           if (new_count <= MaxTbvSize) { // shrink to tbv
-            index_t tmp[MaxTbvSize];
-            const auto tmp_end = std::copy(new_rep.begin(), new_rep.end(),
-                                           static_cast<index_t*>(tmp));
-            auto& tbv_rep = rep.template emplace<tbv>();
-            std::copy(static_cast<index_t*>(tmp), tmp_end, tbv_rep.begin());
-            tbv_rep.resize_to(tbv_rep.begin() + new_count);
+            ibbv temp_ibbv = std::move(new_rep);
+            rep.template emplace<tbv>(temp_ibbv.begin(), temp_ibbv.end());
           }
         });
   }

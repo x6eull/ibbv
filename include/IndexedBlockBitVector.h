@@ -77,7 +77,7 @@ public:
       data[unit_index] |= (static_cast<UnitType>(1) << bit_index);
     }
 
-    /// Returns true if the bit was not set before, and set it.
+    /// Returns true if the bit was not set before, and sets it.
     bool test_and_set(size_t index) noexcept {
       const size_t unit_index = index / UnitBits;
       const size_t bit_index = index % UnitBits;
@@ -85,6 +85,16 @@ public:
       const bool prev_set = data[unit_index] & mask;
       data[unit_index] |= mask;
       return !prev_set; // return true if it was not set before
+    }
+
+    /// Returns true if the bit was set before, and resets it.
+    bool test_and_reset(size_t index) noexcept {
+      const size_t unit_index = index / UnitBits;
+      const size_t bit_index = index % UnitBits;
+      const auto mask = static_cast<UnitType>(1) << bit_index;
+      const bool prev_set = data[unit_index] & mask;
+      data[unit_index] &= ~mask;
+      return prev_set;
     }
 
     void reset(size_t index) noexcept {
@@ -1057,6 +1067,20 @@ public:
       storage.insert(pos, n);
       return true;
     } else return storage.blk_at(pos)->test_and_set(n % BlockBits);
+  }
+
+  /// Check if bit `n` is set. If it isn't, returns false.
+  /// Otherwise, reset it and return true.
+  bool test_and_reset(index_t n) noexcept {
+    const auto target_ind = n & IndexValidBitsMask;
+    const auto pos = storage.find_lower_bound(target_ind);
+    if (pos == storage.num_block ||
+        *storage.idx_at(pos) != target_ind) // not found
+      return false;
+    Block* d = storage.blk_at(pos);
+    bool result = d->test_and_reset(n % BlockBits);
+    if (d->empty()) storage.remove(pos);
+    return result;
   }
 
   /// Unset bit `n`.

@@ -1,12 +1,13 @@
 #pragma once
 
-#include "IndexedBlockBitVector.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <optional>
+
+#include "IndexedBlockBitVector.h"
 
 namespace ibbv {
 /// A sorted vector that contains several numbers. Represents a sparse bitset
@@ -40,6 +41,11 @@ protected:
 
 public:
   TinyBitVector() noexcept = default;
+  /// Construct TinyBitVector by copying a range.
+  /// UB when number of elements > MAX_SIZE.
+  template <typename ForwardIt>
+  TinyBitVector(ForwardIt begin_it, ForwardIt end_it) noexcept
+      : data_end{std::copy(begin_it, end_it, data.begin())} {}
   TinyBitVector(const TinyBitVector& rhs) noexcept
       : data(rhs.data), data_end(data.begin() + rhs.count()) {}
   TinyBitVector& operator=(const TinyBitVector& rhs) noexcept {
