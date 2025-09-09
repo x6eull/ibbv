@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(ibbv INTERFACE 
+add_library(ibbv INTERFACE
   ${CMAKE_CURRENT_LIST_DIR}/include/AdaptiveBitVector.h
 )
 set_target_properties(ibbv PROPERTIES LINKER_LANGUAGE CXX)
@@ -20,12 +20,20 @@ target_include_directories(ibbv INTERFACE
 find_package(mimalloc 2.2 REQUIRED)
 target_link_libraries(ibbv INTERFACE mimalloc-static)
 
+option(IBBV_ENABLE_ABV "Enable AdaptiveBitVector. If disabled, AdaptiveBitVector will be an alias for IndexedBlockBitVector." ON)
+if(IBBV_ENABLE_ABV)
+  add_compile_definitions(IBBV_ENABLE_ABV=1)
+  message(STATUS "AdaptiveBitVector was enabled.")
+else()
+  message(STATUS "AdaptiveBitVector was disabled.")
+endif()
+
 install(TARGETS ibbv EXPORT ibbvTargets)
 install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/include/ DESTINATION include)
 install(EXPORT ibbvTargets
-    FILE ibbvConfig.cmake
-    NAMESPACE ibbv::
-    DESTINATION lib/cmake/ibbv
+  FILE ibbvConfig.cmake
+  NAMESPACE ibbv::
+  DESTINATION lib/cmake/ibbv
 )
 
 option(IBBV_TESTS "Enable ibbv benchmarking with Google Benchmark" OFF)

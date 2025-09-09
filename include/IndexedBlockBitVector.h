@@ -40,13 +40,29 @@ template <uint16_t BlockBits = 128> class IndexedBlockBitVector {
                 "BlockSize other than 128 is unsupported currently");
 
 public:
+#if IBBV_ENABLE_ABV
   template <size_t MaxTbvSize> friend class AdaptiveBitVector;
+#endif
   using UnitType = uint64_t;
   static inline constexpr uint16_t UnitBits = sizeof(UnitType) * 8;
   static inline constexpr uint16_t UnitsPerBlock = BlockBits / UnitBits;
-  template <typename... Args>
-  IndexedBlockBitVector(Args&&... args)
-      : storage{std::forward<Args>(args)...} {}
+
+  IndexedBlockBitVector() noexcept : storage{} {}
+  IndexedBlockBitVector(const uint32_t* value_start,
+                        const size_t value_count) noexcept
+      : storage{value_start, value_count} {}
+  IndexedBlockBitVector(const IndexedBlockBitVector<>& rhs) noexcept
+      : storage{rhs.storage} {}
+  IndexedBlockBitVector& operator=(
+      const IndexedBlockBitVector<>& rhs) noexcept {
+    storage = rhs.storage;
+    return *this;
+  }
+  IndexedBlockBitVector(IndexedBlockBitVector<>&& rhs) noexcept
+      : storage{std::move(rhs.storage)} {}
+  IndexedBlockBitVector& operator=(IndexedBlockBitVector<>&& rhs) noexcept {
+    storage = std::move(rhs.storage);
+  }
 
   struct Block {
     UnitType data[UnitsPerBlock];
@@ -259,6 +275,7 @@ protected:
       num_block = 0;
     }
 
+    IBBVStorage() noexcept : start(nullptr), num_block(0) {}
     /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 8
     /// (UB otherwise)
     __attribute__((no_sanitize("address"))) IBBVStorage(
@@ -888,7 +905,9 @@ protected:
   // Public interfaces
 public:
   class IndexedBlockBitVectorIterator {
+#if IBBV_ENABLE_ABV
     template <size_t> friend class AdaptiveBitVector;
+#endif
 
   public:
     using iterator_category = std::input_iterator_tag;
@@ -1135,6 +1154,14 @@ public:
   /// Returns true if `this` changed.
   bool operator-=(const IndexedBlockBitVector& rhs) noexcept {
     return diff_simd(rhs);
+  }
+
+  IndexedBlockBitVector& intersectWithComplement(
+      const IndexedBlockBitVector& lhs,
+      const IndexedBlockBitVector& rhs) noexcept {
+    *this = lhs;
+    *this -= rhs;
+    return *this;
   }
 
   friend struct std::hash<ibbv::IndexedBlockBitVector<>>;

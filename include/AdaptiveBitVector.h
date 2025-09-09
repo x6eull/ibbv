@@ -10,6 +10,7 @@
 #include "IndexedBlockBitVector.h"
 #include "TinyBitVector.h"
 
+#if IBBV_ENABLE_ABV
 namespace ibbv {
 static inline constexpr size_t DEFAULT_TBV_LIMIT =
     (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t);
@@ -23,34 +24,34 @@ public:
 
 protected:
   std::variant<tbv, ibbv> rep{};
-#define IFE_TBV(ptrvarname, variant, then_block, else_block)                   \
-  if (auto* ptrvarname = std::get_if<tbv>(&variant)) {                         \
-    then_block                                                                 \
-  } else {                                                                     \
-    {                                                                          \
-      auto* ptrvarname = std::get_if<ibbv>(&variant);                          \
-      else_block                                                               \
-    }                                                                          \
-  }
+#  define IFE_TBV(ptrvarname, variant, then_block, else_block)                 \
+    if (auto* ptrvarname = std::get_if<tbv>(&variant)) {                       \
+      then_block                                                               \
+    } else {                                                                   \
+      {                                                                        \
+        auto* ptrvarname = std::get_if<ibbv>(&variant);                        \
+        else_block                                                             \
+      }                                                                        \
+    }
 /// 4 cases
-#define IFE_CASE(variant_lhs, variant_rhs, t_t_block, t_i_block, i_t_block,    \
-                 i_i_block)                                                    \
-  IFE_TBV(                                                                     \
-      lptr, variant_lhs,                                                       \
-      { IFE_TBV(rptr, variant_rhs, t_t_block, t_i_block); },                   \
-      { IFE_TBV(rptr, variant_rhs, i_t_block, i_i_block); })
+#  define IFE_CASE(variant_lhs, variant_rhs, t_t_block, t_i_block, i_t_block,  \
+                   i_i_block)                                                  \
+    IFE_TBV(                                                                   \
+        lptr, variant_lhs,                                                     \
+        { IFE_TBV(rptr, variant_rhs, t_t_block, t_i_block); },                 \
+        { IFE_TBV(rptr, variant_rhs, i_t_block, i_i_block); })
 
 /// 3 cases: matched types are processed in the same way
-#define IFE_MATCH_SYM(variant_lhs, variant_rhs, match_block, t_i_block,        \
-                      i_t_block)                                               \
-  IFE_TBV(lptr, variant_lhs,                                                   \
-          IFE_TBV(rptr, variant_rhs, match_block, t_i_block),                  \
-          IFE_TBV(rptr, variant_rhs, i_t_block, match_block))
+#  define IFE_MATCH_SYM(variant_lhs, variant_rhs, match_block, t_i_block,      \
+                        i_t_block)                                             \
+    IFE_TBV(lptr, variant_lhs,                                                 \
+            IFE_TBV(rptr, variant_rhs, match_block, t_i_block),                \
+            IFE_TBV(rptr, variant_rhs, i_t_block, match_block))
 
 /// 2 cases: unmatched types are also processed in the same way
-#define IFE_SYM(variant_lhs, variant_rhs, match_block, unmatch_block)          \
-  IFE_MATCH_SYM(variant_lhs, variant_rhs, match_block, unmatch_block,          \
-                unmatch_block)
+#  define IFE_SYM(variant_lhs, variant_rhs, match_block, unmatch_block)        \
+    IFE_MATCH_SYM(variant_lhs, variant_rhs, match_block, unmatch_block,        \
+                  unmatch_block)
 
 public:
   /// For debugging. Use with caution.
@@ -323,3 +324,8 @@ template <> struct hash<ibbv::AdaptiveBitVector<>> {
   }
 };
 } // namespace std
+#else
+namespace ibbv {
+template <size_t _ = 0> using AdaptiveBitVector = ibbv::IndexedBlockBitVector<>;
+}
+#endif
