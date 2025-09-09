@@ -1156,6 +1156,10 @@ public:
     return diff_simd(rhs);
   }
 
+  bool intersectWithComplement(const IndexedBlockBitVector& rhs) noexcept {
+    return *this -= rhs;
+  }
+
   IndexedBlockBitVector& intersectWithComplement(
       const IndexedBlockBitVector& lhs,
       const IndexedBlockBitVector& rhs) noexcept {
