@@ -1010,6 +1010,7 @@ public:
   /// NOTE: If you modify the vector after creating an iterator, the iterator
   /// is not stable and may cause UB if used.
   iterator begin() const noexcept {
+    if (empty()) return end();
     return iterator(*this, std::false_type());
   }
   iterator end() const noexcept {
