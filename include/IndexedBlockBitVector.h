@@ -161,12 +161,16 @@ protected:
 
     std::byte* start;
     size_t num_block;
+    /// The pointer to the last used index. It's properly updated after realloc.
+    /// If vec is empty: last_used_idx equals to start (may be nullptr)
+    mutable index_t const* last_used_idx;
 
     static inline auto bytes_needed(size_t num_block) noexcept {
       return num_block * (IndexSize + BlockSize);
     }
     /// Init storage. Ignore any data already exists.
     /// All indexes and blocks are zero-inited.
+    /// last_used_idx is not updated.
     inline void init_small_storage_zeroed(size_t num_block) noexcept {
       start = reinterpret_cast<std::byte*>(
           mi_zalloc_small(bytes_needed(num_block)));
@@ -175,6 +179,7 @@ protected:
 
     /// Init storage. Ignore any data already exists.
     /// All indexes and blocks are uninitialized.
+    /// last_used_idx is not updated.
     inline void alloc_storage(size_t num_block) noexcept {
       start = reinterpret_cast<std::byte*>(mi_malloc(bytes_needed(num_block)));
       this->num_block = num_block;
@@ -208,6 +213,8 @@ protected:
       start = reinterpret_cast<std::byte*>(
           mi_expand(start, bytes_needed(new_num_block)));
       num_block = new_num_block;
+      last_used_idx = std::min<decltype(last_used_idx)>(last_used_idx,
+                                                        idx_at(num_block - 1));
     }
     /// Extend to specified num of blocks. New indexes and blocks are uninited.
     /// If new_num_block <= num_block, do nothing (don't throw).
@@ -216,6 +223,7 @@ protected:
       if (mi_expand(start, bytes_needed(new_num_block))) {
         std::memmove(blk_at(start, new_num_block, 0), blk_at(0),
                      num_block * BlockSize);
+        // `start` is not modified, so is last_used_idx
         num_block = new_num_block;
       } else {
         std::byte* new_start = reinterpret_cast<std::byte*>(
@@ -223,14 +231,25 @@ protected:
         std::memcpy(idx_at(new_start, 0), idx_at(0), num_block * IndexSize);
         std::memcpy(blk_at(new_start, new_num_block, 0), blk_at(0),
                     num_block * BlockSize);
+        last_used_idx = idx_at(new_start, last_used_idx - idx_at(start, 0));
         start = new_start;
         num_block = new_num_block;
       }
     }
 
     inline size_t find_lower_bound(index_t target_index) const noexcept {
-      return std::lower_bound(idx_at(0), idx_at(num_block), target_index) -
-             idx_at(0);
+      if (num_block == 0) return 0; // don't deref nullptr
+
+      if (*last_used_idx == target_index) return last_used_idx - idx_at(0);
+      else {
+        if (*last_used_idx < target_index)
+          last_used_idx = std::lower_bound(last_used_idx + 1, idx_at(num_block),
+                                           target_index);
+        else // *last_used_idx > target_index
+          last_used_idx =
+              std::lower_bound(idx_at(0), last_used_idx, target_index);
+        return last_used_idx - idx_at(0);
+      }
     }
     /// Insert a new block with one bit set.
     /// Requires: 0 <= pos <= num_block, and the block mustn't exists.
@@ -253,6 +272,7 @@ protected:
         ::new (blk_at(new_start, num_block + 1, pos))(Block)(value % BlockBits);
         std::memcpy(blk_at(new_start, num_block + 1, pos + 1), blk_at(pos),
                     (num_block - pos) * BlockSize);
+        last_used_idx = idx_at(new_start, last_used_idx - idx_at(start, 0));
         mi_free(start);
         start = new_start;
         ++num_block;
@@ -268,14 +288,18 @@ protected:
       --num_block;
       start = reinterpret_cast<std::byte*>( // the pointer shouldn't change
           mi_expand(start, bytes_needed(num_block)));
+      last_used_idx = std::min<decltype(last_used_idx)>(last_used_idx,
+                                                        idx_at(num_block - 1));
     }
     inline void clear() noexcept {
       mi_free(start);
       start = nullptr;
       num_block = 0;
+      last_used_idx = nullptr;
     }
 
-    IBBVStorage() noexcept : start(nullptr), num_block(0) {}
+    IBBVStorage() noexcept
+        : start{nullptr}, num_block{0}, last_used_idx{nullptr} {}
     /// Convert a sorted array to IBBVStorage. Require: 1 <= value_count <= 8
     /// (UB otherwise)
     __attribute__((no_sanitize("address"))) IBBVStorage(
@@ -298,6 +322,7 @@ protected:
       const auto num_unique_idx = value_count - num_eq;
 
       init_small_storage_zeroed(num_unique_idx);
+      last_used_idx = idx_at(0);
       index_t* cur_idx = idx_at(0) - 1;
       Block* cur_blk = blk_at(0) - 1;
       /// whether each idx is equal to the previous idx
@@ -316,17 +341,20 @@ protected:
     IBBVStorage(const IBBVStorage& rhs) noexcept {
       alloc_storage(rhs.num_block);
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
+      last_used_idx = idx_at(rhs.last_used_idx - rhs.idx_at(0));
     }
     IBBVStorage& operator=(const IBBVStorage& rhs) noexcept {
       if (this == &rhs) return *this;
       mi_free(start);
       alloc_storage(rhs.num_block);
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
+      last_used_idx = idx_at(rhs.last_used_idx - rhs.idx_at(0));
       return *this;
     }
     /// Move constructor. rhs is unstable after moving
     IBBVStorage(IBBVStorage&& rhs) noexcept
-        : start(rhs.start), num_block(rhs.num_block) {
+        : start{rhs.start}, num_block{rhs.num_block},
+          last_used_idx{rhs.last_used_idx} {
       rhs.start = nullptr;
     }
     /// Move assignment. rhs is unstable after moving if this != &rhs
@@ -335,6 +363,7 @@ protected:
       mi_free(start);
       start = rhs.start;
       num_block = rhs.num_block;
+      last_used_idx = rhs.last_used_idx;
       rhs.start = nullptr;
       return *this;
     }
@@ -366,10 +395,8 @@ protected:
   _inline const Block& block_at(size_t i) const noexcept {
     return *storage.blk_at(i);
   }
-  mutable size_t last_used_pos{0};
 
   // Static helper methods
-
 #define unroll_loop(var, times, ...)                                           \
   static_assert(times == 4);                                                   \
   {                                                                            \
