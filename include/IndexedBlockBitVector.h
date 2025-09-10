@@ -165,8 +165,8 @@ protected:
     /// If vec is empty: last_used_idx equals to start (may be nullptr)
     mutable index_t const* last_used_idx;
 
-    static inline auto bytes_needed(size_t num_block) noexcept {
-      return num_block * (IndexSize + BlockSize);
+    static inline size_t bytes_needed(size_t new_num_block) noexcept {
+      return new_num_block * (IndexSize + BlockSize);
     }
     /// Init storage. Ignore any data already exists.
     /// All indexes and blocks are zero-inited.
@@ -213,8 +213,7 @@ protected:
       start = reinterpret_cast<std::byte*>(
           mi_expand(start, bytes_needed(new_num_block)));
       num_block = new_num_block;
-      last_used_idx = std::min<decltype(last_used_idx)>(last_used_idx,
-                                                        idx_at(num_block - 1));
+      last_used_idx = idx_at(0);
     }
     /// Extend to specified num of blocks. New indexes and blocks are uninited.
     /// If new_num_block <= num_block, do nothing (don't throw).
@@ -248,7 +247,10 @@ protected:
         else // *last_used_idx > target_index
           last_used_idx =
               std::lower_bound(idx_at(0), last_used_idx, target_index);
-        return last_used_idx - idx_at(0);
+        const size_t result = last_used_idx - idx_at(0);
+        // last_used_idx always points to valid index when nonempty
+        last_used_idx = std::min(last_used_idx, idx_at(num_block - 1));
+        return result;
       }
     }
     /// Insert a new block with one bit set.
@@ -288,8 +290,7 @@ protected:
       --num_block;
       start = reinterpret_cast<std::byte*>( // the pointer shouldn't change
           mi_expand(start, bytes_needed(num_block)));
-      last_used_idx = std::min<decltype(last_used_idx)>(last_used_idx,
-                                                        idx_at(num_block - 1));
+      last_used_idx = idx_at(0);
     }
     inline void clear() noexcept {
       mi_free(start);
