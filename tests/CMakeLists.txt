@@ -11,7 +11,7 @@ set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googlebenchmark)
 
 add_executable(ibbv_bench bench.cpp)
-target_compile_options(ibbv_bench PRIVATE -fno-exceptions -fno-rtti)
+target_compile_options(ibbv_bench PRIVATE -fno-rtti)
 target_link_libraries(ibbv_bench ibbv benchmark::benchmark)
 
 
