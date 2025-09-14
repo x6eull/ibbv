@@ -78,5 +78,15 @@ public:
                                const RoaringBitVector& rhs) noexcept {
     rep = lhs.rep - rhs.rep;
   }
+
+  friend struct std::hash<RoaringBitVector>;
 };
 } // namespace ibbv
+
+namespace std {
+template <> struct hash<ibbv::RoaringBitVector> {
+  std::size_t operator()(const ibbv::RoaringBitVector& s) const noexcept {
+    return s.count() ^ s.find_first();
+  }
+};
+} // namespace std

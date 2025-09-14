@@ -21,13 +21,13 @@ find_package(mimalloc 2.2 REQUIRED)
 target_link_libraries(ibbv INTERFACE mimalloc-static)
 
 option(IBBV_USE_ROARING "Use RoaringBitmap/CRoaring as bit vector implementation." OFF)
+option(IBBV_ENABLE_ABV "Enable AdaptiveBitVector. If disabled, AdaptiveBitVector will be an alias for IndexedBlockBitVector." ON)
+
 if(IBBV_USE_ROARING)
   add_compile_definitions(IBBV_USE_ROARING=1)
+  add_compile_definitions(ROARING_EXCEPTIONS=0)
   message(STATUS "RoaringBitmap is enabled and acts as the underlying bit vector implementation.")
-endif()
-
-option(IBBV_ENABLE_ABV "Enable AdaptiveBitVector. If disabled, AdaptiveBitVector will be an alias for IndexedBlockBitVector." ON)
-if(IBBV_ENABLE_ABV)
+elseif(IBBV_ENABLE_ABV)
   add_compile_definitions(IBBV_ENABLE_ABV=1)
   message(STATUS "AdaptiveBitVector is enabled.")
 else()
