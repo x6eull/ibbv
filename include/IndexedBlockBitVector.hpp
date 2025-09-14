@@ -20,9 +20,9 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <utility>
 
 #if IBBV_COUNT_OP
-#  include "Counter.h"
+#  include "Counter.hpp"
 #endif
-#include "bit_utils.h"
+#include "bit_utils.hpp"
 
 #define DEFAULT_COPY_MOVE(T)                                                   \
   T(const T&) noexcept = default;                                              \

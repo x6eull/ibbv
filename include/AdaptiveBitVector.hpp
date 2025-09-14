@@ -7,11 +7,11 @@
 #include <type_traits>
 #include <variant>
 
-#include "IndexedBlockBitVector.h"
-#include "TinyBitVector.h"
+#include "IndexedBlockBitVector.hpp"
+#include "TinyBitVector.hpp"
 
 #if IBBV_USE_ROARING
-#  include "RoaringBitVector.h"
+#  include "RoaringBitVector.hpp"
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
 }

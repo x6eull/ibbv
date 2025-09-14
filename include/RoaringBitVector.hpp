@@ -1,6 +1,5 @@
 #pragma once
 
-#include "roaring.c"
 #include "roaring.hh"
 
 namespace ibbv {

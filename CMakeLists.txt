@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.19)
-project(ibbv LANGUAGES CXX)
+project(ibbv LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(ibbv INTERFACE
-  ${CMAKE_CURRENT_LIST_DIR}/include/AdaptiveBitVector.h
+add_library(ibbv STATIC
+  ${CMAKE_CURRENT_LIST_DIR}/include/AdaptiveBitVector.hpp
 )
 set_target_properties(ibbv PROPERTIES LINKER_LANGUAGE CXX)
 # target_compile_definitions(ibbv INTERFACE IBBV_COUNT_OP=1)
@@ -24,9 +24,10 @@ option(IBBV_USE_ROARING "Use RoaringBitmap/CRoaring as bit vector implementation
 option(IBBV_ENABLE_ABV "Enable AdaptiveBitVector. If disabled, AdaptiveBitVector will be an alias for IndexedBlockBitVector." ON)
 
 if(IBBV_USE_ROARING)
+  message(STATUS "RoaringBitmap is enabled and acts as the underlying bit vector implementation.")
   add_compile_definitions(IBBV_USE_ROARING=1)
   add_compile_definitions(ROARING_EXCEPTIONS=0)
-  message(STATUS "RoaringBitmap is enabled and acts as the underlying bit vector implementation.")
+  target_sources(ibbv PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include/roaring.c)
 elseif(IBBV_ENABLE_ABV)
   add_compile_definitions(IBBV_ENABLE_ABV=1)
   message(STATUS "AdaptiveBitVector is enabled.")

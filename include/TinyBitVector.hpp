@@ -7,7 +7,7 @@
 #include <cstring>
 #include <optional>
 
-#include "IndexedBlockBitVector.h"
+#include "IndexedBlockBitVector.hpp"
 
 namespace ibbv {
 /// A sorted vector that contains several numbers. Represents a sparse bitset
