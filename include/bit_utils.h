@@ -91,9 +91,7 @@ template <> struct avx_vec<512> {
     return _mm512_test_epi64_mask(v, v) == 0;
   }
   /// count logical 1 bits in packed 64-bit integers
-  static _inline auto popcnt(const data_t& v) {
-    return _mm512_popcnt_epi64(v);
-  }
+  static _inline auto popcnt(const data_t& v) { return _mm512_popcnt_epi64(v); }
   static _inline auto or_op(const data_t& a, const data_t& b) {
     return _mm512_or_si512(a, b);
   }
@@ -128,9 +126,7 @@ template <> struct avx_vec<256> {
   static _inline bool is_zero(const data_t& v) {
     return _mm256_testz_si256(v, v) == 1;
   }
-  static _inline auto popcnt(const data_t& v) {
-    return _mm256_popcnt_epi64(v);
-  }
+  static _inline auto popcnt(const data_t& v) { return _mm256_popcnt_epi64(v); }
   static _inline auto or_op(const data_t& a, const data_t& b) {
     return _mm256_or_si256(a, b);
   }
@@ -162,9 +158,7 @@ template <> struct avx_vec<128> {
   static _inline bool is_zero(const data_t& v) {
     return _mm_testz_si128(v, v) == 1;
   }
-  static _inline auto popcnt(const data_t& v) {
-    return _mm_popcnt_epi64(v);
-  }
+  static _inline auto popcnt(const data_t& v) { return _mm_popcnt_epi64(v); }
   static _inline auto or_op(const data_t& a, const data_t& b) {
     return _mm_or_si128(a, b);
   }

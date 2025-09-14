@@ -11,9 +11,9 @@
 #include "TinyBitVector.h"
 
 #if IBBV_USE_ROARING
-#include "RoaringBitVector.h"
+#  include "RoaringBitVector.h"
 namespace ibbv {
-  template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
+template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
 }
 #elif IBBV_ENABLE_ABV
 namespace ibbv {
@@ -60,9 +60,7 @@ protected:
 
 public:
   /// For debugging. Use with caution.
-  __attribute__((used)) auto impl_type() const noexcept {
-    return rep.index();
-  }
+  __attribute__((used)) auto impl_type() const noexcept { return rep.index(); }
   /// For debugging. Use with caution.
   __attribute__((used)) ibbv* get_ibbv() noexcept {
     return std::get_if<ibbv>(&rep);
@@ -125,12 +123,8 @@ public:
     }
   };
   using iterator = AdaptiveBitVectorIterator;
-  auto begin() const noexcept {
-    return iterator(rep, std::false_type());
-  }
-  auto end() const noexcept {
-    return iterator(rep, std::true_type());
-  }
+  auto begin() const noexcept { return iterator(rep, std::false_type()); }
+  auto end() const noexcept { return iterator(rep, std::true_type()); }
   auto find_first() const noexcept {
     return std::visit([](auto&& arg) { return arg.find_first(); }, rep);
   }
@@ -140,9 +134,7 @@ public:
   auto count() const noexcept {
     return std::visit([](auto&& arg) { return (size_t)arg.count(); }, rep);
   }
-  auto clear() noexcept {
-    rep.template emplace<tbv>();
-  }
+  auto clear() noexcept { rep.template emplace<tbv>(); }
   auto test(index_t n) const noexcept {
     return std::visit([=](auto&& arg) { return arg.test(n); }, rep);
   }

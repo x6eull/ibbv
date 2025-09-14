@@ -70,16 +70,12 @@ public:
     /// Default constructor. data is uninitialized.
     Block() noexcept = default;
     /// Initialize block with only one bit set.
-    Block(size_t index) noexcept : data{} {
-      set(index);
-    }
+    Block(size_t index) noexcept : data{} { set(index); }
 
     DEFAULT_COPY_MOVE(Block);
 
     /// Returns true if all bits are zero.
-    bool empty() const noexcept {
-      return testz<BlockBits>(data);
-    }
+    bool empty() const noexcept { return testz<BlockBits>(data); }
 
     bool test(size_t index) const noexcept {
       const size_t unit_index = index / UnitBits;
@@ -131,9 +127,7 @@ public:
       return ibbv::utils::cmpeq<BlockBits>(data, rhs.data);
     }
 
-    bool operator!=(const Block& rhs) const noexcept {
-      return !(*this == rhs);
-    }
+    bool operator!=(const Block& rhs) const noexcept { return !(*this == rhs); }
 
     bool operator|=(const Block& rhs) noexcept {
       return ibbv::utils::or_inplace<BlockBits>(data, rhs.data);
@@ -188,9 +182,7 @@ protected:
     static inline index_t* idx_at(std::byte* base, size_t pos) noexcept {
       return reinterpret_cast<index_t*>(base) + pos;
     }
-    inline index_t* idx_at(size_t pos) noexcept {
-      return idx_at(start, pos);
-    }
+    inline index_t* idx_at(size_t pos) noexcept { return idx_at(start, pos); }
     inline const index_t* idx_at(size_t pos) const noexcept {
       return idx_at(start, pos);
     }
@@ -336,9 +328,7 @@ protected:
         cur_blk->set(value_start[i] % BlockBits);
       }
     }
-    ~IBBVStorage() noexcept {
-      mi_free(start);
-    }
+    ~IBBVStorage() noexcept { mi_free(start); }
     IBBVStorage(const IBBVStorage& rhs) noexcept {
       alloc_storage(rhs.num_block);
       std::memcpy(idx_at(0), rhs.idx_at(0), bytes_needed(rhs.num_block));
@@ -381,18 +371,12 @@ protected:
   IBBVStorage storage;
 
   /// Returns # of blocks.
-  _inline size_t size() const noexcept {
-    return storage.num_block;
-  }
+  _inline size_t size() const noexcept { return storage.num_block; }
   _inline const index_t& index_at(size_t i) const noexcept {
     return *storage.idx_at(i);
   }
-  _inline index_t& index_at(size_t i) noexcept {
-    return *storage.idx_at(i);
-  }
-  _inline Block& block_at(size_t i) noexcept {
-    return *storage.blk_at(i);
-  }
+  _inline index_t& index_at(size_t i) noexcept { return *storage.idx_at(i); }
+  _inline Block& block_at(size_t i) noexcept { return *storage.blk_at(i); }
   _inline const Block& block_at(size_t i) const noexcept {
     return *storage.blk_at(i);
   }
@@ -1011,9 +995,7 @@ public:
         : idx_it{vec.storage.idx_at(vec.storage.num_block)} {}
     DEFAULT_COPY_MOVE(IndexedBlockBitVectorIterator);
 
-    value_type operator*() const noexcept {
-      return cur_pos;
-    }
+    value_type operator*() const noexcept { return cur_pos; }
     IndexedBlockBitVectorIterator& operator++() noexcept {
       // Forward max 1 blk.
       bool moved = incr_bit();
@@ -1041,9 +1023,7 @@ public:
     if (empty()) return end();
     return iterator(*this, std::false_type());
   }
-  iterator end() const noexcept {
-    return iterator(*this, std::true_type());
-  }
+  iterator end() const noexcept { return iterator(*this, std::true_type()); }
 
   /// Return the first set bit in the bitmap.  Return -1 if no bits are set.
   int32_t find_first() const noexcept {
@@ -1052,9 +1032,7 @@ public:
   }
 
   /// Returns true if no bits are set.
-  bool empty() const noexcept {
-    return storage.num_block == 0;
-  }
+  bool empty() const noexcept { return storage.num_block == 0; }
 
   /// Returns the count of bits set.
   uint32_t count() const noexcept {
@@ -1081,9 +1059,7 @@ public:
   }
 
   /// Empty the set and release memory holded.
-  void clear() noexcept {
-    storage.clear();
-  }
+  void clear() noexcept { storage.clear(); }
 
   /// Returns true if bit `n` is set.
   bool test(index_t n) const noexcept {

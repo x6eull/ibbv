@@ -26,12 +26,8 @@ protected:
   void resize_to(const typename data_container::iterator new_end) noexcept {
     data_end = new_end;
   }
-  void inc_size() noexcept {
-    ++data_end;
-  }
-  void dec_size() noexcept {
-    --data_end;
-  }
+  void inc_size() noexcept { ++data_end; }
+  void dec_size() noexcept { --data_end; }
   inline typename data_container::const_iterator cast_const(
       const typename data_container::iterator it) const noexcept {
     return data.cbegin() + (it - data.begin());
@@ -69,36 +65,18 @@ public:
   // Modifying with iterator is forbidden to ensure data sorted
   using iterator = typename data_container::const_iterator;
   using const_iterator = typename data_container::const_iterator;
-  inline auto begin() const noexcept {
-    return data.begin();
-  }
-  inline auto cbegin() const noexcept {
-    return data.cbegin();
-  }
-  inline auto begin() noexcept {
-    return data.begin();
-  }
-  inline auto end() const noexcept {
-    return cast_const(data_end);
-  }
-  inline auto cend() const noexcept {
-    return cast_const(data_end);
-  }
-  inline auto end() noexcept {
-    return data_end;
-  }
+  inline auto begin() const noexcept { return data.begin(); }
+  inline auto cbegin() const noexcept { return data.cbegin(); }
+  inline auto begin() noexcept { return data.begin(); }
+  inline auto end() const noexcept { return cast_const(data_end); }
+  inline auto cend() const noexcept { return cast_const(data_end); }
+  inline auto end() noexcept { return data_end; }
   /// Returns true if no bits are set.
-  inline auto empty() const noexcept {
-    return begin() == end();
-  }
+  inline auto empty() const noexcept { return begin() == end(); }
   /// Returns the count of bits set.
-  inline size_t count() const noexcept {
-    return end() - begin();
-  };
+  inline size_t count() const noexcept { return end() - begin(); };
   /// Empty the set.
-  inline void clear() noexcept {
-    resize_to(begin());
-  }
+  inline void clear() noexcept { resize_to(begin()); }
   /// Expand tbv to ibbv.
   inline auto expand() const noexcept {
     return IndexedBlockBitVector<>(
