@@ -11,7 +11,7 @@
 #include "TinyBitVector.hpp"
 
 #if IBBV_USE_ROARING
-#  include "RoaringBitVector.hpp"
+#  include "Roaring/RoaringBitVector.hpp"
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
 }
