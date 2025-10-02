@@ -7,15 +7,19 @@
 #include <type_traits>
 #include <variant>
 
-#include "IndexedBlockBitVector.hpp"
-#include "TinyBitVector.hpp"
-
-#if IBBV_IMPL == IBBV_IMPL_ROARING
+#if IBBV_IMPL == IBBV_IMPL_CONCISE || IBBV_IMPL == IBBV_IMPL_WAH
+#  include "Concise/ConciseBitVector.hpp"
+namespace ibbv {
+template <size_t _ = 0> using AdaptiveBitVector = ibbv::ConciseBitVector;
+}
+#elif IBBV_IMPL == IBBV_IMPL_ROARING
 #  include "Roaring/RoaringBitVector.hpp"
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
 }
 #elif IBBV_IMPL == IBBV_IMPL_ABV
+#  include "TinyBitVector.hpp"
+
 namespace ibbv {
 static inline constexpr size_t DEFAULT_TBV_LIMIT =
     (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t);
@@ -322,6 +326,8 @@ template <> struct hash<ibbv::AdaptiveBitVector<>> {
 };
 } // namespace std
 #else
+#  include "IndexedBlockBitVector.hpp"
+
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::IndexedBlockBitVector<>;
 }
