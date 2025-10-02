@@ -10,12 +10,12 @@
 #include "IndexedBlockBitVector.hpp"
 #include "TinyBitVector.hpp"
 
-#if IBBV_USE_ROARING
+#if IBBV_IMPL == IBBV_IMPL_ROARING
 #  include "Roaring/RoaringBitVector.hpp"
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
 }
-#elif IBBV_ENABLE_ABV
+#elif IBBV_IMPL == IBBV_IMPL_ABV
 namespace ibbv {
 static inline constexpr size_t DEFAULT_TBV_LIMIT =
     (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t);

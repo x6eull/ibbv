@@ -1,7 +1,7 @@
 #pragma once
 
-#include "AdaptiveBitVector.h"
-#include "IndexedBlockBitVector.h"
+#include "AdaptiveBitVector.hpp"
+#include "IndexedBlockBitVector.hpp"
 #include "SparseBitVector.h"
 #include <cstdint>
 #include <initializer_list>

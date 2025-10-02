@@ -1,6 +1,6 @@
 #pragma once
 static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
-// The least requirement for IIBV is AVX512F instruction set.
+// The least requirement for IBBV is AVX512F instruction set.
 // Certain operation is more efficient if corresponding instruction set
 //  is available:
 // AVX512_VP2INTERSECT: speed up set union/intersect/subset testing, and
@@ -40,7 +40,7 @@ template <uint16_t BlockBits = 128> class IndexedBlockBitVector {
                 "BlockSize other than 128 is unsupported currently");
 
 public:
-#if IBBV_ENABLE_ABV
+#if IBBV_IMPL == IBBV_IMPL_ABV
   template <size_t MaxTbvSize> friend class AdaptiveBitVector;
 #endif
   using UnitType = uint64_t;
@@ -917,7 +917,7 @@ protected:
   // Public interfaces
 public:
   class IndexedBlockBitVectorIterator {
-#if IBBV_ENABLE_ABV
+#if IBBV_IMPL == IBBV_IMPL_ABV
     template <size_t> friend class AdaptiveBitVector;
 #endif
 

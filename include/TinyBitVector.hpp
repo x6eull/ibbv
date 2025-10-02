@@ -17,7 +17,7 @@ namespace ibbv {
 /// original representation is no longer valid.
 template <typename index_t, size_t MAX_SIZE> class TinyBitVector {
 protected:
-#if IBBV_ENABLE_ABV
+#if IBBV_IMPL == IBBV_IMPL_ABV
   template <size_t MaxTbvSize> friend class AdaptiveBitVector;
 #endif
   using data_container = std::array<index_t, MAX_SIZE>;
