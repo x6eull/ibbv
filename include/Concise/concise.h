@@ -1,9 +1,11 @@
+#include <exception>
 #include <iostream>
 #include <cstdint>
 #include <vector>
 #include <stdexcept>
 #include <algorithm>
 #include <queue>
+#include <cassert>
 
 #include "conciseutil.h"
 
@@ -566,7 +568,8 @@ public:
     if (e > MAX_ALLOWED_INTEGER) {
       std::cerr << "max integer allowed is " << MAX_ALLOWED_INTEGER
                 << std::endl;
-      throw std::runtime_error("out of bound value");
+      std::terminate();
+      // throw std::runtime_error("out of bound value");
     }
     // the element can be simply appended
     if ((int32_t)e > last) {
@@ -1221,13 +1224,13 @@ public:
     return orig;
   }
 
-  bool operator==(const ConciseSetBitForwardIterator &o) {
+  bool operator==(const ConciseSetBitForwardIterator &o) const {
     if ((has_value == false) && (o.has_value == false))
       return true;
     return (current_value == *o) && (has_value == o.has_value);
   }
 
-  bool operator!=(const ConciseSetBitForwardIterator &o) {
+  bool operator!=(const ConciseSetBitForwardIterator &o) const {
     return !(*this == o);
   }
   ConciseSetBitForwardIterator(const ConciseSet<wah_mode> &parent,
