@@ -40,7 +40,7 @@ public:
     // TODO: inefficient (rarely used)
     decltype(rep) tmp{};
     tmp.append(n);
-    rep = rep.logicalandnot(tmp);
+    rep = std::move(rep.logicalandnot(tmp));
   }
   void set(index_t n) noexcept { rep.add(n); }
   bool test_and_set(index_t n) noexcept {
@@ -65,7 +65,7 @@ public:
 
   bool operator|=(const ConciseBitVector& rhs) noexcept {
     const auto old_count = count();
-    rep = rep.logicalor(rhs.rep);
+    rep = std::move(rep.logicalor(rhs.rep));
     return count() != old_count;
   }
   ConciseBitVector operator|(const ConciseBitVector& rhs) const noexcept {
@@ -76,7 +76,7 @@ public:
 
   bool operator&=(const ConciseBitVector& rhs) noexcept {
     const auto old_count = count();
-    rep = rep.logicaland(rhs.rep);
+    rep = std::move(rep.logicaland(rhs.rep));
     return count() != old_count;
   }
   ConciseBitVector operator&(const ConciseBitVector& rhs) const noexcept {
@@ -87,7 +87,7 @@ public:
 
   bool operator-=(const ConciseBitVector& rhs) noexcept {
     const auto old_count = count();
-    rep = rep.logicalandnot(rhs.rep);
+    rep = std::move(rep.logicalandnot(rhs.rep));
     return count() != old_count;
   }
   ConciseBitVector operator-(const ConciseBitVector& rhs) const noexcept {

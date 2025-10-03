@@ -1291,7 +1291,9 @@ public:
   ~ConciseSetBitForwardIterator() = default;
 
   ConciseSetBitForwardIterator(const ConciseSetBitForwardIterator &o)
-      : i(o.i) {}
+    = default;
+  ConciseSetBitForwardIterator(ConciseSetBitForwardIterator &&o)
+    = default;
   uint32_t word_location;
   uint32_t current_value;
   bool has_value;
