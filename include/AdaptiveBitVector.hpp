@@ -7,7 +7,12 @@
 #include <type_traits>
 #include <variant>
 
-#if IBBV_IMPL == IBBV_IMPL_CONCISE || IBBV_IMPL == IBBV_IMPL_WAH
+#if IBBV_IMPL == IBBV_IMPL_EWAH
+#  include "EWAH/EWAHBitVector.hpp"
+namespace ibbv {
+template <size_t _ = 0> using AdaptiveBitVector = ibbv::EWAHBitVector;
+}
+#elif IBBV_IMPL == IBBV_IMPL_CONCISE || IBBV_IMPL == IBBV_IMPL_WAH
 #  include "Concise/ConciseBitVector.hpp"
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::ConciseBitVector;
@@ -325,10 +330,12 @@ template <> struct hash<ibbv::AdaptiveBitVector<>> {
   }
 };
 } // namespace std
-#else
+#elif IBBV_IMPL == IBBV_IMPL_IBBV
 #  include "IndexedBlockBitVector.hpp"
 
 namespace ibbv {
 template <size_t _ = 0> using AdaptiveBitVector = ibbv::IndexedBlockBitVector<>;
 }
+#else
+#  error Unknown IBBV_IMPL
 #endif
