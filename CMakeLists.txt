@@ -17,8 +17,12 @@ target_include_directories(ibbv INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
 )
 
-find_package(mimalloc 2.2 REQUIRED)
-target_link_libraries(ibbv INTERFACE mimalloc-static)
+option(IBBV_MIMALLOC "Enable mimalloc" OFF)
+if(IBBV_MIMALLOC)
+  find_package(mimalloc 2.2 REQUIRED)
+  target_link_libraries(ibbv INTERFACE mimalloc-static)
+  add_compile_definitions(IBBV_MIMALLOC=1)
+endif()
 
 set(IBBV_IMPL "ibbv" CACHE STRING "Set the implementation of the bit vector.")
 set_property(CACHE IBBV_IMPL PROPERTY STRINGS "ibbv" "abv" "roaring" "wah" "concise" "ewah")

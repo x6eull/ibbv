@@ -15,9 +15,32 @@ static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 #include <cstring>
 #include <immintrin.h>
 #include <iterator>
-#include <mimalloc.h>
 #include <type_traits>
 #include <utility>
+
+#if IBBV_MIMALLOC
+#  include <mimalloc.h>
+#else
+static inline void* mi_zalloc_small(size_t size) {
+  return calloc(size, 1);
+}
+
+static inline void* mi_malloc(size_t size) {
+  return malloc(size);
+}
+
+static inline void* mi_mallocn(size_t count, size_t size) {
+  return mi_malloc(count * size);
+}
+
+static inline constexpr void* mi_expand(void* p, size_t newsize) {
+  return nullptr;
+}
+
+static inline void mi_free(void* p) {
+  return free(p);
+}
+#endif
 
 #if IBBV_COUNT_OP
 #  include "Counter.hpp"
@@ -202,8 +225,13 @@ protected:
     inline void truncate(size_t new_num_block) noexcept {
       if (new_num_block >= num_block) return;
       std::memmove(idx_at(new_num_block), blk_at(0), new_num_block * BlockSize);
+#if IBBV_MIMALLOC
       start = reinterpret_cast<std::byte*>(
           mi_expand(start, bytes_needed(new_num_block)));
+#else
+      start = reinterpret_cast<std::byte*>(
+          realloc(start, bytes_needed(new_num_block)));
+#endif
       num_block = new_num_block;
       last_used_idx = idx_at(0);
     }
@@ -223,6 +251,7 @@ protected:
         std::memcpy(blk_at(new_start, new_num_block, 0), blk_at(0),
                     num_block * BlockSize);
         last_used_idx = idx_at(new_start, last_used_idx - idx_at(start, 0));
+        mi_free(start);
         start = new_start;
         num_block = new_num_block;
       }
@@ -280,8 +309,13 @@ protected:
                        (num_block - pos - 1) * IndexSize + pos * BlockSize,
                    blk_at(pos + 1), (num_block - pos - 1) * BlockSize);
       --num_block;
+#if IBBV_MIMALLOC
       start = reinterpret_cast<std::byte*>( // the pointer shouldn't change
           mi_expand(start, bytes_needed(num_block)));
+#else
+      start =
+          reinterpret_cast<std::byte*>(realloc(start, bytes_needed(num_block)));
+#endif
       last_used_idx = idx_at(0);
     }
     inline void clear() noexcept {
