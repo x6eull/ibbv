@@ -137,6 +137,9 @@ public:
   auto find_first() const noexcept {
     return std::visit([](auto&& arg) { return arg.find_first(); }, rep);
   }
+  auto find_last() const noexcept {
+    return std::visit([](auto&& arg) { return arg.find_last(); }, rep);
+  }
   auto empty() const noexcept {
     return std::visit([](auto&& arg) { return arg.empty(); }, rep);
   }

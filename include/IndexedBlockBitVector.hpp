@@ -1065,6 +1065,22 @@ public:
     return *begin();
   }
 
+  int32_t find_last() const noexcept {
+    if (empty()) return -1;
+    const auto last_block_pos = storage.num_block - 1;
+    const Block& last_block = *storage.blk_at(last_block_pos);
+    const auto last_index = *storage.idx_at(last_block_pos);
+    // a unit can't be empty here
+    for (int unit_i = UnitsPerBlock - 1; unit_i >= 0; --unit_i) {
+      const UnitType cur_unit = last_block.data[unit_i];
+      if (cur_unit != 0) {
+        const auto bit_pos = UnitBits - 1 - ibbv::utils::lzcnt(cur_unit);
+        return last_index + unit_i * UnitBits + bit_pos;
+      }
+    }
+    return -1; // should not reach here
+  }
+
   /// Returns true if no bits are set.
   bool empty() const noexcept { return storage.num_block == 0; }
 

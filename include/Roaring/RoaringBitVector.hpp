@@ -17,6 +17,7 @@ public:
   auto begin() const noexcept { return rep.begin(); }
   auto end() const noexcept { return rep.end(); }
   auto find_first() const noexcept { return rep.minimum(); }
+  auto find_last() const noexcept { return rep.maximum(); }
   auto empty() const noexcept { return rep.isEmpty(); }
   auto count() const noexcept { return rep.cardinality(); }
   void clear() noexcept { rep.clear(); }

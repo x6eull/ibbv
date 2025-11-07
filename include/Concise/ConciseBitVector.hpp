@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <limits>
 
 #include "concise.h"
@@ -28,9 +29,10 @@ public:
 
   auto begin() const noexcept { return rep.begin(); }
   auto end() const noexcept { return rep.end(); }
-  auto find_first() const noexcept {
-    return rep.isEmpty() ? std::numeric_limits<index_t>::max() : *rep.begin();
+  int32_t find_first() const noexcept {
+    return rep.isEmpty() ? -1 : static_cast<int32_t>(*rep.begin());
   }
+  int32_t find_last() const noexcept { return rep.last; }
   auto empty() const noexcept { return rep.isEmpty(); }
   auto count() const noexcept { return rep.size(); }
   void clear() noexcept { rep.clear(); }
@@ -111,7 +113,7 @@ public:
 namespace std {
 template <> struct hash<ibbv::ConciseBitVector> {
   size_t operator()(const ibbv::ConciseBitVector& bv) const noexcept {
-    return bv.count() ^ bv.find_first();
+    return bv.count() ^ static_cast<size_t>(bv.find_first());
   }
 };
 } // namespace std
