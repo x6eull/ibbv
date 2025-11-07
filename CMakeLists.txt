@@ -11,7 +11,7 @@ add_library(ibbv STATIC
 )
 set_target_properties(ibbv PROPERTIES LINKER_LANGUAGE CXX)
 # target_compile_definitions(ibbv INTERFACE IBBV_COUNT_OP=1)
-target_compile_options(ibbv INTERFACE -march=native)
+target_compile_options(ibbv PUBLIC -march=native)
 target_include_directories(ibbv INTERFACE
   $<INSTALL_INTERFACE:include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
@@ -22,6 +22,12 @@ if(IBBV_MIMALLOC)
   find_package(mimalloc 2.2 REQUIRED)
   target_link_libraries(ibbv INTERFACE mimalloc-static)
   add_compile_definitions(IBBV_MIMALLOC=1)
+endif()
+
+option(IBBV_DEBUG_INFO "Enable debug information" OFF)
+if(IBBV_DEBUG_INFO)
+  message(STATUS "Enabling ibbv debug information")
+  target_compile_options(ibbv PRIVATE -g3)
 endif()
 
 set(IBBV_IMPL "ibbv" CACHE STRING "Set the implementation of the bit vector.")
