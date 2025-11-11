@@ -272,6 +272,11 @@ public:
         },
         { return *lptr &= *rptr; })
   }
+  AdaptiveBitVector operator&(const AdaptiveBitVector& rhs) const noexcept {
+    auto copy = *this;
+    copy &= rhs;
+    return copy;
+  }
 
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.

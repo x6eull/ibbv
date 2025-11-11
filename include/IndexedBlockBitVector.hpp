@@ -1205,6 +1205,12 @@ public:
     return intersect_simd(rhs);
   }
 
+  IndexedBlockBitVector operator&(const IndexedBlockBitVector& rhs) const {
+    IndexedBlockBitVector copy(*this);
+    copy &= rhs;
+    return copy;
+  }
+
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool operator-=(const IndexedBlockBitVector& rhs) noexcept {
