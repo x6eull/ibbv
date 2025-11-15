@@ -270,7 +270,7 @@ public:
           ibbv temp_ibbv = std::move(*lptr); // save *lptr
           return rep.template emplace<tbv>(*rptr).inplace_intersect(temp_ibbv);
         },
-        { return *lptr &= *rptr; })
+        { return *lptr &= *rptr; });
   }
   AdaptiveBitVector operator&(const AdaptiveBitVector& rhs) const noexcept {
     auto copy = *this;
