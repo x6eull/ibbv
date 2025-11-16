@@ -21,8 +21,8 @@ protected:
   template <size_t MaxTbvSize> friend class AdaptiveBitVector;
 #endif
   using data_container = std::array<index_t, MAX_SIZE>;
+  typename data_container::iterator data_end;
   data_container data;
-  typename data_container::iterator data_end = data.begin();
   void resize_to(const typename data_container::iterator new_end) noexcept {
     data_end = new_end;
   }
@@ -38,7 +38,7 @@ protected:
   }
 
 public:
-  TinyBitVector() noexcept = default;
+  TinyBitVector() noexcept : data_end(data.begin()) {}
   /// Construct TinyBitVector by copying a range.
   /// UB when number of elements > MAX_SIZE.
   template <typename ForwardIt>
@@ -181,7 +181,7 @@ public:
   bool inplace_union(
       const TinyBitVector& rhs,
       std::optional<IndexedBlockBitVector<>>& expanded) noexcept {
-    const auto prev_count = count();
+    const auto prev_end = end();
     std::array<index_t, 2 * MAX_SIZE> tmp;
     const auto tmp_end = static_cast<typename data_container::const_iterator>(
         std::set_union(begin(), end(), rhs.begin(), rhs.end(), tmp.begin()));
@@ -191,24 +191,24 @@ public:
       return true;
     } else {
       resize_to(std::copy(tmp.cbegin(), tmp_end, begin()));
-      return new_count != prev_count;
+      return end() != prev_end;
     }
   }
   /// Inplace intersect with rhs.
   /// Returns true if `this` changed.
   bool inplace_intersect(const TinyBitVector& rhs) noexcept {
-    auto prev_count = count();
+    auto prev_end = end();
     resize_to(
         std::set_intersection(begin(), end(), rhs.begin(), rhs.end(), begin()));
-    return count() != prev_count;
+    return end() != prev_end;
   }
   /// Inplace intersect with rhs.
   /// Returns true if `this` changed.
   bool inplace_intersect(const IndexedBlockBitVector<>& rhs) noexcept {
-    auto prev_count = count();
+    auto prev_end = end();
     resize_to(
         std::set_intersection(begin(), end(), rhs.begin(), rhs.end(), begin()));
-    return count() != prev_count;
+    return end() != prev_end;
   }
   void diff_into_this(const TinyBitVector& lhs,
                       const TinyBitVector& rhs) noexcept {
@@ -223,16 +223,16 @@ public:
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool inplace_diff(const TinyBitVector& rhs) noexcept {
-    auto prev_count = count();
+    auto prev_end = end();
     diff_into_this(*this, rhs);
-    return count() != prev_count;
+    return end() != prev_end;
   }
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool inplace_diff(const IndexedBlockBitVector<>& rhs) noexcept {
-    auto prev_count = count();
+    auto prev_end = end();
     diff_into_this(*this, rhs);
-    return count() != prev_count;
+    return end() != prev_end;
   }
   friend struct std::hash<TinyBitVector>;
 };

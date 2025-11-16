@@ -25,6 +25,16 @@ template <size_t _ = 0> using AdaptiveBitVector = ibbv::RoaringBitVector;
 #elif IBBV_IMPL == IBBV_IMPL_ABV
 #  include "TinyBitVector.hpp"
 
+namespace std::__detail::__variant {
+template <>
+constexpr bool __never_valueless<
+    ibbv::TinyBitVector<uint32_t, (sizeof(ibbv::IndexedBlockBitVector<>) - 8) /
+                                      sizeof(uint32_t)>,
+    ibbv::IndexedBlockBitVector<>>() {
+  return true;
+}
+} // namespace std::__detail::__variant
+
 namespace ibbv {
 static inline constexpr size_t DEFAULT_TBV_LIMIT =
     (sizeof(IndexedBlockBitVector<>) - 8) / sizeof(uint32_t);

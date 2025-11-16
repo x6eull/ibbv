@@ -177,7 +177,7 @@ protected:
     static inline constexpr auto BlockSize = sizeof(Block);
 
     std::byte* start;
-    size_t num_block;
+    uint32_t num_block;
     /// The pointer to the last used index. It's properly updated after realloc.
     /// If vec is empty: last_used_idx equals to start (may be nullptr)
     mutable index_t const* last_used_idx;
