@@ -1,6 +1,7 @@
 #include "copy.h"  // IWYU pragma: keep
 #include "set.h"   // IWYU pragma: keep
 #include "union.h" // IWYU pragma: keep
+#include "abv_expand.h" // IWYU pragma: keep
 
 // Run the benchmark
 BENCHMARK_MAIN();
