@@ -11,7 +11,7 @@ static void BM_abv_expand(benchmark::State& state) {
   }
   for (auto _ : state) {
     ibbv::IndexedBlockBitVector<> v(items, num_eles);
-    benchmark::DoNotOptimize(v);
+    benchmark::DoNotOptimize(reinterpret_cast<uint32_t*>(&v));
   }
   state.SetItemsProcessed(state.iterations());
 }
