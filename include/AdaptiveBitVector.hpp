@@ -80,6 +80,10 @@ protected:
 public:
   /// For debugging. Use with caution.
   __attribute__((used)) auto impl_type() const noexcept { return rep.index(); }
+  /// For debugging. Use with caution. Return 0 for tbv.
+  __attribute__((used)) auto num_blocks() const noexcept {
+    IFE_TBV(v, rep, return static_cast<size_t>(0);, return v->size(););
+  }
   /// For debugging. Use with caution.
   __attribute__((used)) ibbv* get_ibbv() noexcept {
     return std::get_if<ibbv>(&rep);
@@ -101,7 +105,7 @@ public:
     AdaptiveBitVectorIterator(const std::variant<tbv, ibbv>& vec,
                               std::false_type) noexcept
         : it_rep(std::visit(
-              [=](auto&& arg) {
+              [](auto&& arg) {
                 return std::variant<typename tbv::iterator,
                                     typename ibbv::iterator>{arg.begin()};
               },
@@ -109,7 +113,7 @@ public:
     AdaptiveBitVectorIterator(const std::variant<tbv, ibbv>& vec,
                               std::true_type) noexcept
         : it_rep(std::visit(
-              [=](auto&& arg) {
+              [](auto&& arg) {
                 return std::variant<typename tbv::iterator,
                                     typename ibbv::iterator>{arg.end()};
               },

@@ -186,13 +186,14 @@ public:
     const auto tmp_end = static_cast<typename data_container::const_iterator>(
         std::set_union(begin(), end(), rhs.begin(), rhs.end(), tmp.begin()));
     const size_t new_count = tmp_end - tmp.cbegin();
-    if (new_count > MAX_SIZE) {
+    if (new_count == count()) return false; // not modified
+
+    // introduced new elements
+    if (new_count > MAX_SIZE) // expand to IBBV
       expanded.emplace(static_cast<const index_t*>(tmp.cbegin()), new_count);
-      return true;
-    } else {
+    else // copy from buffer
       resize_to(std::copy(tmp.cbegin(), tmp_end, begin()));
-      return end() != prev_end;
-    }
+    return true;
   }
   /// Inplace intersect with rhs.
   /// Returns true if `this` changed.
