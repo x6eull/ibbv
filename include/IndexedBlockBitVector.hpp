@@ -85,6 +85,7 @@ public:
       : storage{std::move(rhs.storage)} {}
   IndexedBlockBitVector& operator=(IndexedBlockBitVector<>&& rhs) noexcept {
     storage = std::move(rhs.storage);
+    return *this;
   }
 
   struct Block {
