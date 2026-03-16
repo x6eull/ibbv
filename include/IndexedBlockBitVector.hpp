@@ -178,6 +178,7 @@ protected:
     /// indexes. Don't free or modify this pointer.
     Block* blocks{nullptr};
     size_t size{0};
+    static constexpr size_t size_per_element = sizeof(index_t) + sizeof(Block);
 
     ReservedArray() noexcept = default;
     ~ReservedArray() noexcept { mi_free(indexes); }
@@ -189,13 +190,13 @@ protected:
 
       if (indexes == nullptr) { // initial allocation
         size = min_size;
-        indexes = static_cast<index_t*>(mi_mallocn(size, sizeof(index_t)));
+        indexes = static_cast<index_t*>(mi_mallocn(size, size_per_element));
         blocks = reinterpret_cast<Block*>(indexes + size);
         return;
       }
 
       if (mi_expand(indexes,
-                    min_size * sizeof(index_t))) { // try to expand in-place
+                    min_size * size_per_element)) { // try to expand in-place
         size = min_size;
         // `indexes` is not modified
         blocks = reinterpret_cast<Block*>(indexes + min_size);
@@ -205,7 +206,7 @@ protected:
       // need to free previous pointer
       mi_free(indexes);
       size = min_size;
-      indexes = static_cast<index_t*>(mi_malloc(min_size * sizeof(index_t)));
+      indexes = static_cast<index_t*>(mi_malloc(min_size * size_per_element));
       blocks = reinterpret_cast<Block*>(indexes + min_size);
     }
   };
