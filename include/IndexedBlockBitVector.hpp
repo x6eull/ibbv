@@ -169,6 +169,43 @@ public:
   using index_t = uint32_t;
 
 protected:
+  class ReservedArray {
+  public:
+    index_t* indexes{nullptr};
+    /// Pointer to the first block. The blocks are stored continuously after the
+    /// indexes. Don't free or modify this pointer.
+    Block* blocks{nullptr};
+    size_t size{0};
+
+    ReservedArray() noexcept = default;
+    ~ReservedArray() noexcept { mi_free(indexes); }
+
+    void reserve(size_t min_size) noexcept {
+      if (size >= min_size) return; // already have enough space
+
+      if (indexes == nullptr) { // initial allocation
+        size = min_size;
+        indexes = static_cast<index_t*>(mi_mallocn(size, sizeof(index_t)));
+        blocks = reinterpret_cast<Block*>(indexes + size);
+        return;
+      }
+
+      if (mi_expand(indexes,
+                    min_size * sizeof(index_t))) { // try to expand in-place
+        size = min_size;
+        // `indexes` is not modified
+        blocks = reinterpret_cast<Block*>(indexes + min_size);
+        return;
+      }
+
+      // need to free previous pointer
+      mi_free(indexes);
+      size = min_size;
+      indexes = static_cast<index_t*>(mi_malloc(min_size * sizeof(index_t)));
+      blocks = reinterpret_cast<Block*>(indexes + min_size);
+    }
+  };
+
   static inline constexpr auto IndexReservedBits = log2int<BlockBits>;
   static inline constexpr index_t IndexValidBitsMask =
       ~((1 << IndexReservedBits) - 1);
@@ -474,8 +511,8 @@ protected:
     size_t lhs_i = 0, rhs_i = 0;
     bool changed = false;
     size_t extra_count = 0;
-    index_t* extra_indexes = (index_t*)mi_mallocn(sizeof(index_t), rhs_size);
-    Block* extra_blocks = (Block*)mi_mallocn(sizeof(Block), rhs_size);
+    static ReservedArray extra_elements{};
+    extra_elements.reserve(rhs_size);
 
     alignas(64) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
     while (lhs_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
@@ -501,8 +538,8 @@ protected:
           ++store_blk_base;
           match_this_temp >>= this_pad + 1;
         } else { // current rhs block is extra
-          extra_indexes[extra_count] = rhs.index_at(rhs_i + i);
-          extra_blocks[extra_count] = rhs_block_cur;
+          extra_elements.indexes[extra_count] = rhs.index_at(rhs_i + i);
+          extra_elements.blocks[extra_count] = rhs_block_cur;
           ++extra_count;
         }
       }
@@ -534,8 +571,8 @@ protected:
       if (lhs_ind < rhs_ind) ++lhs_i;
       else if (lhs_ind > rhs_ind) {
         // copy current rhs block to temp
-        extra_indexes[extra_count] = rhs_ind;
-        extra_blocks[extra_count] = rhs.block_at(rhs_i);
+        extra_elements.indexes[extra_count] = rhs_ind;
+        extra_elements.blocks[extra_count] = rhs.block_at(rhs_i);
         ++extra_count;
         ++rhs_i;
       } else { // lhs_ind == rhs_ind
@@ -555,28 +592,27 @@ protected:
       signed int dest_i = this_size + extra_count - 1, src_i = this_size - 1,
                  extra_i = extra_count - 1;
       while (src_i >= 0 && extra_i >= 0) {
-        if (index_at(src_i) > extra_indexes[extra_i]) {
+        if (index_at(src_i) > extra_elements.indexes[extra_i]) {
           index_at(dest_i) = index_at(src_i);
           block_at(dest_i) = block_at(src_i);
           --src_i;
         } else {
-          index_at(dest_i) = extra_indexes[extra_i];
-          block_at(dest_i) = extra_blocks[extra_i];
+          index_at(dest_i) = extra_elements.indexes[extra_i];
+          block_at(dest_i) = extra_elements.blocks[extra_i];
           --extra_i;
         }
         --dest_i;
       }
       if (extra_i >= 0) {
         // copy remaining extra blocks
-        std::memcpy(&index_at(0), &extra_indexes[0],
+        std::memcpy(&index_at(0), &extra_elements.indexes[0],
                     sizeof(index_t) * (extra_i + 1));
-        std::memcpy(&block_at(0), &extra_blocks[0],
+        std::memcpy(&block_at(0), &extra_elements.blocks[0],
                     sizeof(Block) * (extra_i + 1));
       }
       // else if src_i >= 0, they are already in place
     }
-    mi_free(extra_indexes);
-    mi_free(extra_blocks);
+
     if (rhs_remaining) { // remaining elements in rhs are always largest
       std::memcpy(&index_at(this_size + extra_count), &rhs.index_at(rhs_i),
                   sizeof(index_t) * (rhs_size - rhs_i));
