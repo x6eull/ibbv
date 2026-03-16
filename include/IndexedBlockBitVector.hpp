@@ -169,6 +169,8 @@ public:
   using index_t = uint32_t;
 
 protected:
+  /// A storage object for indexes and blocks.
+  /// Doesn't care the data after resizing.
   class ReservedArray {
   public:
     index_t* indexes{nullptr};
@@ -180,6 +182,8 @@ protected:
     ReservedArray() noexcept = default;
     ~ReservedArray() noexcept { mi_free(indexes); }
 
+    /// Reserve space for at least `min_size` indexes and blocks.
+    /// Data stored is undefined after this operation.
     void reserve(size_t min_size) noexcept {
       if (size >= min_size) return; // already have enough space
 
@@ -490,9 +494,7 @@ protected:
                advance_rhs = 16 - ibbv::utils::lzcnt(lemask_rhs);
     return {advance_lhs, advance_rhs};
   }
-  static inline size_t szudzik(size_t a, size_t b) {
-    return a > b ? b * b + a : a * a + a + b;
-  }
+
   /// A 512-bit vector contains 32*16-bit integers in ascending order,
   /// that is, {0, 1, 2, ..., 31} (from e0 to e31).
   static inline const __m512i asc_indexes = _mm512_set_epi16(
@@ -1272,11 +1274,15 @@ public:
 
 namespace std {
 template <> struct hash<ibbv::IndexedBlockBitVector<>> {
+private:
+  static inline size_t szudzik(size_t a, size_t b) {
+    return a > b ? b * b + a : a * a + a + b;
+  }
+
+public:
   std::size_t operator()(
       const ibbv::IndexedBlockBitVector<>& s) const noexcept {
-    return ibbv::IndexedBlockBitVector<>::szudzik(
-        s.count(),
-        ibbv::IndexedBlockBitVector<>::szudzik(s.size(), s.find_first()));
+    return szudzik(s.count(), szudzik(s.size(), s.find_first()));
   }
 };
 } // namespace std
