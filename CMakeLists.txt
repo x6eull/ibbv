@@ -11,7 +11,6 @@ add_library(ibbv STATIC
 )
 set_target_properties(ibbv PROPERTIES LINKER_LANGUAGE CXX)
 # target_compile_definitions(ibbv INTERFACE IBBV_COUNT_OP=1)
-target_compile_options(ibbv PUBLIC -march=native)
 target_include_directories(ibbv INTERFACE
   $<INSTALL_INTERFACE:include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
@@ -28,6 +27,13 @@ option(IBBV_DEBUG_INFO "Enable debug information" OFF)
 if(IBBV_DEBUG_INFO)
   message(STATUS "Enabling ibbv debug information")
   target_compile_options(ibbv PRIVATE -g3)
+endif()
+
+option(IBBV_FORCE_SCALAR "Force scalar implementation" OFF)
+target_compile_options(ibbv PUBLIC -march=native)
+if(IBBV_FORCE_SCALAR)
+  message(STATUS "Enabling force scalar implementation")
+  add_compile_definitions(IBBV_FORCE_SCALAR=1)
 endif()
 
 set(IBBV_IMPL "ibbv" CACHE STRING "Set the implementation of the bit vector.")

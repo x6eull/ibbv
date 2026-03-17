@@ -1,11 +1,4 @@
 #pragma once
-static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
-// The least requirement for IBBV is AVX512F instruction set.
-// Certain operation is more efficient if corresponding instruction set
-//  is available:
-// AVX512_VP2INTERSECT: speed up set union/intersect/subset testing, and
-//  other algorithms using vectorized index matching.
-// AVX512VPOPCNTDQ: speed up count() method.
 
 #include <algorithm>
 #include <cassert>
@@ -45,6 +38,17 @@ static inline void mi_free(void* p) {
 #if IBBV_COUNT_OP
 #  include "Counter.hpp"
 #endif
+
+#ifndef IBBV_FORCE_SCALAR
+static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
+// The least requirement for IBBV is AVX512F instruction set.
+// Certain operation is more efficient if corresponding instruction set
+//  is available:
+// AVX512_VP2INTERSECT: speed up set union/intersect/subset testing, and
+//  other algorithms using vectorized index matching.
+// AVX512VPOPCNTDQ: speed up count() method.
+#endif
+
 #include "bit_utils.hpp"
 
 #define DEFAULT_COPY_MOVE(T)                                                   \
@@ -625,6 +629,34 @@ protected:
 #if IBBV_COUNT_OP
     ctr.inc({this_count, this_size, rhs_count, rhs_size, count(), size()});
 #endif
+    return changed;
+  }
+
+  bool union_scalar(const IndexedBlockBitVector& rhs) noexcept {
+    size_t lhs_i = 0, rhs_i = 0;
+    bool changed = false;
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind < rhs_ind) ++lhs_i;
+      else if (lhs_ind > rhs_ind) {
+        storage.insert(lhs_i, rhs_ind);
+        block_at(lhs_i) = rhs.block_at(rhs_i);
+        changed = true;
+        ++lhs_i;
+        ++rhs_i;
+      } else { // lhs_ind == rhs_ind
+        changed |= (block_at(lhs_i) |= rhs.block_at(rhs_i));
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    // remaining blocks in rhs are always largest, just append them
+    while (rhs_i < rhs.size()) {
+      storage.insert(size(), rhs.index_at(rhs_i));
+      block_at(size() - 1) = rhs.block_at(rhs_i);
+      changed = true;
+      ++rhs_i;
+    }
     return changed;
   }
 
@@ -1230,7 +1262,11 @@ public:
   /// Inplace union with rhs.
   /// Returns true if `this` changed.
   bool operator|=(const IndexedBlockBitVector& rhs) noexcept {
+#if IBBV_FORCE_SCALAR
+    return union_scalar(rhs);
+#else
     return union_simd(rhs);
+#endif
   }
 
   IndexedBlockBitVector operator|(const IndexedBlockBitVector& rhs) const {
