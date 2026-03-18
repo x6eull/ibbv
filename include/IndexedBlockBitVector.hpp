@@ -885,6 +885,42 @@ protected:
     return changed;
   }
 
+  bool diff_scalar(const IndexedBlockBitVector& rhs) noexcept {
+    size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
+    bool changed = false;
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind < rhs_ind) { // keep this block
+        index_at(valid_count) = lhs_ind;
+        block_at(valid_count) = block_at(lhs_i);
+        ++lhs_i;
+        ++valid_count;
+      } else if (lhs_ind > rhs_ind) ++rhs_i;
+      else { // compute ANDNOT
+        const auto [_changed, zeroed] = block_at(lhs_i) -= rhs.block_at(rhs_i);
+        if (zeroed) // changed to zero
+          changed = true;
+        else {
+          changed |= _changed;
+          index_at(valid_count) = lhs_ind;
+          block_at(valid_count) = block_at(lhs_i);
+          valid_count++;
+        }
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    // the rest element is kept
+    while (lhs_i < size()) {
+      index_at(valid_count) = index_at(lhs_i);
+      block_at(valid_count) = block_at(lhs_i);
+      ++lhs_i, ++valid_count;
+    }
+    storage.truncate(valid_count);
+    changed |= (valid_count != size());
+    return changed;
+  }
+
   bool contains_simd(const IndexedBlockBitVector& rhs) const noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
     if (this_size < rhs_size) return false;
@@ -1290,7 +1326,11 @@ public:
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool operator-=(const IndexedBlockBitVector& rhs) noexcept {
+#if IBBV_FORCE_SCALAR
+    return diff_scalar(rhs);
+#else
     return diff_simd(rhs);
+#endif
   }
 
   bool intersectWithComplement(const IndexedBlockBitVector& rhs) noexcept {
