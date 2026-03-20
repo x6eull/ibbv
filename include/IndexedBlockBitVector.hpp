@@ -15,11 +15,11 @@
 #  include <mimalloc.h>
 #else
 static inline void* mi_zalloc_small(size_t size) {
-  return calloc(size, 1);
+  return std::calloc(size, 1);
 }
 
 static inline void* mi_malloc(size_t size) {
-  return malloc(size);
+  return std::malloc(size);
 }
 
 static inline void* mi_mallocn(size_t count, size_t size) {
@@ -31,7 +31,11 @@ static inline constexpr void* mi_expand(void* p, size_t newsize) {
 }
 
 static inline void mi_free(void* p) {
-  return free(p);
+  return std::free(p);
+}
+
+static inline void* mi_malloc_aligned(size_t size, size_t alignment) {
+  return std::aligned_alloc(alignment, size);
 }
 #endif
 
@@ -178,40 +182,27 @@ protected:
   class ReservedArray {
   public:
     index_t* indexes{nullptr};
-    /// Pointer to the first block. The blocks are stored continuously after the
-    /// indexes. Don't free or modify this pointer.
+    /// Pointer to the first block. Use __builtin_assume_aligned(blocks, 16)
     Block* blocks{nullptr};
     size_t size{0};
-    static constexpr size_t size_per_element = sizeof(index_t) + sizeof(Block);
 
     ReservedArray() noexcept = default;
-    ~ReservedArray() noexcept { mi_free(indexes); }
+    ~ReservedArray() noexcept {
+      mi_free(indexes);
+      mi_free(blocks);
+    }
 
     /// Reserve space for at least `min_size` indexes and blocks.
     /// Data stored is undefined after this operation.
     void reserve(size_t min_size) noexcept {
       if (size >= min_size) return; // already have enough space
 
-      if (indexes == nullptr) { // initial allocation
-        size = min_size;
-        indexes = static_cast<index_t*>(mi_mallocn(size, size_per_element));
-        blocks = reinterpret_cast<Block*>(indexes + size);
-        return;
-      }
-
-      if (mi_expand(indexes,
-                    min_size * size_per_element)) { // try to expand in-place
-        size = min_size;
-        // `indexes` is not modified
-        blocks = reinterpret_cast<Block*>(indexes + min_size);
-        return;
-      }
-
-      // need to free previous pointer
       mi_free(indexes);
+      mi_free(blocks);
       size = min_size;
-      indexes = static_cast<index_t*>(mi_malloc(min_size * size_per_element));
-      blocks = reinterpret_cast<Block*>(indexes + min_size);
+      indexes = static_cast<index_t*>(mi_mallocn(size, sizeof(index_t)));
+      blocks = static_cast<Block*>(
+          mi_malloc_aligned(size * sizeof(Block), sizeof(Block)));
     }
   };
 
@@ -520,6 +511,8 @@ protected:
     size_t extra_count = 0;
     static ReservedArray extra_elements{};
     extra_elements.reserve(rhs_size);
+    const auto extra_blocks = static_cast<Block*>(
+        __builtin_assume_aligned(extra_elements.blocks, sizeof(Block)));
 
     alignas(64) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
     while (lhs_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
@@ -546,7 +539,7 @@ protected:
           match_this_temp >>= this_pad + 1;
         } else { // current rhs block is extra
           extra_elements.indexes[extra_count] = rhs.index_at(rhs_i + i);
-          extra_elements.blocks[extra_count] = rhs_block_cur;
+          extra_blocks[extra_count] = rhs_block_cur;
           ++extra_count;
         }
       }
@@ -579,7 +572,7 @@ protected:
       else if (lhs_ind > rhs_ind) {
         // copy current rhs block to temp
         extra_elements.indexes[extra_count] = rhs_ind;
-        extra_elements.blocks[extra_count] = rhs.block_at(rhs_i);
+        extra_blocks[extra_count] = rhs.block_at(rhs_i);
         ++extra_count;
         ++rhs_i;
       } else { // lhs_ind == rhs_ind
@@ -605,7 +598,7 @@ protected:
           --src_i;
         } else {
           index_at(dest_i) = extra_elements.indexes[extra_i];
-          block_at(dest_i) = extra_elements.blocks[extra_i];
+          block_at(dest_i) = extra_blocks[extra_i];
           --extra_i;
         }
         --dest_i;
@@ -614,8 +607,7 @@ protected:
         // copy remaining extra blocks
         std::memcpy(&index_at(0), &extra_elements.indexes[0],
                     sizeof(index_t) * (extra_i + 1));
-        std::memcpy(&block_at(0), &extra_elements.blocks[0],
-                    sizeof(Block) * (extra_i + 1));
+        std::memcpy(&block_at(0), extra_blocks, sizeof(Block) * (extra_i + 1));
       }
       // else if src_i >= 0, they are already in place
     }
