@@ -514,7 +514,7 @@ protected:
     const auto extra_blocks = static_cast<Block*>(
         __builtin_assume_aligned(extra_elements.blocks, sizeof(Block)));
 
-    alignas(64) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
+    alignas(__m512i) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
     while (lhs_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
       /// indexes[lhs_i..lhs_i + 16]
       const auto v_lhs_idx = _mm512_loadu_epi32(storage.idx_at(lhs_i)),
@@ -770,7 +770,7 @@ protected:
     const auto this_size = size(), rhs_size = rhs.size();
     size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
     bool changed = false;
-    alignas(64) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
+    alignas(__m512i) Block rhs_block_temp[512 / (sizeof(index_t) * 8)];
     while (lhs_i + 16 <= this_size && rhs_i + 16 <= rhs_size) {
       /// indexes[lhs_i..lhs_i + 16]
       const auto v_lhs_idx = _mm512_loadu_epi32(storage.idx_at(lhs_i)),
