@@ -6,10 +6,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <immintrin.h>
 #include <iterator>
 #include <type_traits>
 #include <utility>
+
+#ifndef IBBV_FORCE_SCALAR
+#  include <immintrin.h>
+#endif
 
 #if IBBV_MIMALLOC
 #  include <mimalloc.h>
@@ -43,7 +46,10 @@ static inline void* mi_malloc_aligned(size_t size, size_t alignment) {
 #  include "Counter.hpp"
 #endif
 
-#ifndef IBBV_FORCE_SCALAR
+#ifdef IBBV_FORCE_SCALAR
+#  define delegate_method(name, ...) name##_scalar(__VA_ARGS__)
+#else
+#  define delegate_method(name, ...) name##_simd(__VA_ARGS__)
 static_assert(__AVX512F__, "AVX512F is required for IndexedBlockBitVector");
 // The least requirement for IBBV is AVX512F instruction set.
 // Certain operation is more efficient if corresponding instruction set
@@ -217,7 +223,8 @@ protected:
     std::byte* start;
     uint32_t num_block;
     /// The pointer to the last used index. It's properly updated after realloc.
-    /// If vec is empty: last_used_idx equals to start (may be nullptr)
+    /// If vec is empty: last_used_idx equals to start (or nullptr possibly)
+    /// If vec is nonempty: last_used_idx always points to a valid index
     mutable index_t const* last_used_idx;
 
     static inline size_t bytes_needed(size_t new_num_block) noexcept {
@@ -369,6 +376,7 @@ protected:
     /// (UB otherwise)
     __attribute__((no_sanitize("address"))) IBBVStorage(
         const index_t* value_start, const size_t value_count) noexcept {
+#ifdef __AVX512F__
       const auto v_raw = _mm256_loadu_epi32(value_start);
       /// clear lowest IndexReservedBits bits
       const auto v_lowcleared = _mm256_slli_epi32(
@@ -399,6 +407,27 @@ protected:
         *cur_idx = idx_low_cleared[i];
         cur_blk->set(value_start[i] % BlockBits);
       }
+#else
+      // scalar fallback for small count. The algorithm is straightforward, but
+      // it's guaranteed to be correct and efficient for small count.
+      index_t idx[8];
+      Block blks[8];
+      int num_unique_idx = 0;
+      for (size_t i = 0; i < value_count; i++) {
+        const index_t idx_cleared = value_start[i] & IndexValidBitsMask;
+        if (num_unique_idx == 0 || idx_cleared != idx[num_unique_idx - 1]) {
+          idx[num_unique_idx] = idx_cleared;
+          blks[num_unique_idx] = Block(value_start[i] % BlockBits);
+          num_unique_idx++;
+        } else {
+          blks[num_unique_idx - 1].set(value_start[i] % BlockBits);
+        }
+      }
+      init_small_storage_zeroed(num_unique_idx);
+      std::memcpy(idx_at(0), idx, num_unique_idx * sizeof(index_t));
+      std::memcpy(blk_at(0), blks, num_unique_idx * sizeof(Block));
+      last_used_idx = idx_at(0);
+#endif
     }
     ~IBBVStorage() noexcept { mi_free(start); }
     IBBVStorage(const IBBVStorage& rhs) noexcept {
@@ -473,6 +502,7 @@ protected:
     __VA_ARGS__;                                                               \
   }
 
+#ifndef IBBV_FORCE_SCALAR
   static _inline std::pair<uint8_t, uint8_t> adv_count(
       const IndexedBlockBitVector<>& lhs, const IndexedBlockBitVector<>& rhs,
       const __m512i& lhs_idx, const __m512i& rhs_idx, const size_t lhs_i,
@@ -499,11 +529,11 @@ protected:
 
   // SIMD algorithms.
   bool union_simd(const IndexedBlockBitVector& rhs) noexcept {
-#if IBBV_COUNT_OP
+#  if IBBV_COUNT_OP
     // this_count, this_size, rhs_count, rhs_size, result_count, result_size
     static Counter<int, int, int, int, int, int> ctr{"union_simd"};
     const auto this_count = count(), rhs_count = rhs.count();
-#endif
+#  endif
     // Update `this` inplace, save extra blocks to temp
     const auto this_size = size(), rhs_size = rhs.size();
     size_t lhs_i = 0, rhs_i = 0;
@@ -618,37 +648,9 @@ protected:
       std::memcpy(&block_at(this_size + extra_count), &rhs.block_at(rhs_i),
                   sizeof(Block) * (rhs_size - rhs_i));
     }
-#if IBBV_COUNT_OP
+#  if IBBV_COUNT_OP
     ctr.inc({this_count, this_size, rhs_count, rhs_size, count(), size()});
-#endif
-    return changed;
-  }
-
-  bool union_scalar(const IndexedBlockBitVector& rhs) noexcept {
-    size_t lhs_i = 0, rhs_i = 0;
-    bool changed = false;
-    while (lhs_i < size() && rhs_i < rhs.size()) {
-      const auto lhs_ind = index_at(lhs_i);
-      const auto rhs_ind = rhs.index_at(rhs_i);
-      if (lhs_ind < rhs_ind) ++lhs_i;
-      else if (lhs_ind > rhs_ind) {
-        storage.insert(lhs_i, rhs_ind);
-        block_at(lhs_i) = rhs.block_at(rhs_i);
-        changed = true;
-        ++lhs_i;
-        ++rhs_i;
-      } else { // lhs_ind == rhs_ind
-        changed |= (block_at(lhs_i) |= rhs.block_at(rhs_i));
-        ++lhs_i, ++rhs_i;
-      }
-    }
-    // remaining blocks in rhs are always largest, just append them
-    while (rhs_i < rhs.size()) {
-      storage.insert(size(), rhs.index_at(rhs_i));
-      block_at(size() - 1) = rhs.block_at(rhs_i);
-      changed = true;
-      ++rhs_i;
-    }
+#  endif
     return changed;
   }
 
@@ -877,42 +879,6 @@ protected:
     return changed;
   }
 
-  bool diff_scalar(const IndexedBlockBitVector& rhs) noexcept {
-    size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
-    bool changed = false;
-    while (lhs_i < size() && rhs_i < rhs.size()) {
-      const auto lhs_ind = index_at(lhs_i);
-      const auto rhs_ind = rhs.index_at(rhs_i);
-      if (lhs_ind < rhs_ind) { // keep this block
-        index_at(valid_count) = lhs_ind;
-        block_at(valid_count) = block_at(lhs_i);
-        ++lhs_i;
-        ++valid_count;
-      } else if (lhs_ind > rhs_ind) ++rhs_i;
-      else { // compute ANDNOT
-        const auto [_changed, zeroed] = block_at(lhs_i) -= rhs.block_at(rhs_i);
-        if (zeroed) // changed to zero
-          changed = true;
-        else {
-          changed |= _changed;
-          index_at(valid_count) = lhs_ind;
-          block_at(valid_count) = block_at(lhs_i);
-          valid_count++;
-        }
-        ++lhs_i, ++rhs_i;
-      }
-    }
-    // the rest element is kept
-    while (lhs_i < size()) {
-      index_at(valid_count) = index_at(lhs_i);
-      block_at(valid_count) = block_at(lhs_i);
-      ++lhs_i, ++valid_count;
-    }
-    storage.truncate(valid_count);
-    changed |= (valid_count != size());
-    return changed;
-  }
-
   bool contains_simd(const IndexedBlockBitVector& rhs) const noexcept {
     const auto this_size = size(), rhs_size = rhs.size();
     if (this_size < rhs_size) return false;
@@ -1035,6 +1001,127 @@ protected:
       });
       lhs_i += advance_lhs, rhs_i += advance_rhs;
     }
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind > rhs_ind) ++rhs_i;
+      else if (lhs_ind < rhs_ind) ++lhs_i;
+      else {
+        if (block_at(lhs_i).intersects(rhs.block_at(rhs_i))) return true;
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    return false;
+  }
+#endif
+
+  bool union_scalar(const IndexedBlockBitVector& rhs) noexcept {
+    size_t lhs_i = 0, rhs_i = 0;
+    bool changed = false;
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind < rhs_ind) ++lhs_i;
+      else if (lhs_ind > rhs_ind) {
+        storage.insert(lhs_i, rhs_ind);
+        block_at(lhs_i) = rhs.block_at(rhs_i);
+        changed = true;
+        ++lhs_i;
+        ++rhs_i;
+      } else { // lhs_ind == rhs_ind
+        changed |= (block_at(lhs_i) |= rhs.block_at(rhs_i));
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    // remaining blocks in rhs are always largest, just append them
+    while (rhs_i < rhs.size()) {
+      storage.insert(size(), rhs.index_at(rhs_i));
+      block_at(size() - 1) = rhs.block_at(rhs_i);
+      changed = true;
+      ++rhs_i;
+    }
+    return changed;
+  }
+
+  bool intersect_scalar(const IndexedBlockBitVector& rhs) noexcept {
+    size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
+    bool changed = false;
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind < rhs_ind) ++lhs_i;
+      else if (lhs_ind > rhs_ind) ++rhs_i;
+      else { // compute AND
+        const auto [_changed, zeroed] = block_at(lhs_i) &= rhs.block_at(rhs_i);
+        if (zeroed) // changed to zero
+          changed = true;
+        else {
+          changed |= _changed;
+          index_at(valid_count) = lhs_ind;
+          block_at(valid_count) = block_at(lhs_i);
+          valid_count++;
+        }
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    storage.truncate(valid_count);
+    changed |= (valid_count != size());
+    return changed;
+  }
+
+  bool diff_scalar(const IndexedBlockBitVector& rhs) noexcept {
+    size_t valid_count = 0, lhs_i = 0, rhs_i = 0;
+    bool changed = false;
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind < rhs_ind) { // keep this block
+        index_at(valid_count) = lhs_ind;
+        block_at(valid_count) = block_at(lhs_i);
+        ++lhs_i;
+        ++valid_count;
+      } else if (lhs_ind > rhs_ind) ++rhs_i;
+      else { // compute ANDNOT
+        const auto [_changed, zeroed] = block_at(lhs_i) -= rhs.block_at(rhs_i);
+        if (zeroed) // changed to zero
+          changed = true;
+        else {
+          changed |= _changed;
+          index_at(valid_count) = lhs_ind;
+          block_at(valid_count) = block_at(lhs_i);
+          valid_count++;
+        }
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    // the rest element is kept
+    while (lhs_i < size()) {
+      index_at(valid_count) = index_at(lhs_i);
+      block_at(valid_count) = block_at(lhs_i);
+      ++lhs_i, ++valid_count;
+    }
+    storage.truncate(valid_count);
+    changed |= (valid_count != size());
+    return changed;
+  }
+
+  bool contains_scalar(const IndexedBlockBitVector& rhs) const noexcept {
+    size_t lhs_i = 0, rhs_i = 0;
+    while (lhs_i < size() && rhs_i < rhs.size()) {
+      const auto lhs_ind = index_at(lhs_i);
+      const auto rhs_ind = rhs.index_at(rhs_i);
+      if (lhs_ind > rhs_ind) return false;
+      else if (lhs_ind < rhs_ind) ++lhs_i;
+      else {
+        if (!block_at(lhs_i).contains(rhs.block_at(rhs_i))) return false;
+        ++lhs_i, ++rhs_i;
+      }
+    }
+    return rhs_i == rhs.size();
+  }
+
+  bool intersects_scalar(const IndexedBlockBitVector& rhs) const noexcept {
+    size_t lhs_i = 0, rhs_i = 0;
     while (lhs_i < size() && rhs_i < rhs.size()) {
       const auto lhs_ind = index_at(lhs_i);
       const auto rhs_ind = rhs.index_at(rhs_i);
@@ -1188,24 +1275,24 @@ public:
   uint32_t count() const noexcept {
     if (size() == 0) return 0;
 
-    if constexpr (__AVX512VPOPCNTDQ__ && __AVX512VL__) {
-      const Block* it = storage.blk_at(0);
-      const auto v0 = avx_vec<BlockBits>::load(&(it->data));
-      auto c = avx_vec<BlockBits>::popcnt(v0);
-      ++it;
-      for (; it != storage.blk_at(size()); ++it) {
-        const auto curv = avx_vec<BlockBits>::load(&(it->data));
-        const auto curc = avx_vec<BlockBits>::popcnt(curv);
-        c = avx_vec<BlockBits>::add_op(c, curc);
-      }
-      return avx_vec<BlockBits>::reduce_add(c);
-    } else {
-      uint32_t result = 0;
-      auto arr = reinterpret_cast<const uint64_t*>(storage.blk_at(0));
-      for (size_t i = 0; i < size() * sizeof(Block) / 8; ++i, ++arr)
-        result += ibbv::utils::popcnt(*arr);
-      return result;
+#if __AVX512VPOPCNTDQ__ && __AVX512VL__
+    const Block* it = storage.blk_at(0);
+    const auto v0 = avx_vec<BlockBits>::load(&(it->data));
+    auto c = avx_vec<BlockBits>::popcnt(v0);
+    ++it;
+    for (; it != storage.blk_at(size()); ++it) {
+      const auto curv = avx_vec<BlockBits>::load(&(it->data));
+      const auto curc = avx_vec<BlockBits>::popcnt(curv);
+      c = avx_vec<BlockBits>::add_op(c, curc);
     }
+    return avx_vec<BlockBits>::reduce_add(c);
+#else
+    uint32_t result = 0;
+    auto arr = reinterpret_cast<const uint64_t*>(storage.blk_at(0));
+    for (size_t i = 0; i < size() * sizeof(Block) / 8; ++i, ++arr)
+      result += ibbv::utils::popcnt(*arr);
+    return result;
+#endif
   }
 
   /// Empty the set and release memory holded.
@@ -1271,12 +1358,12 @@ public:
 
   /// Returns true if `this` contains all bits of rhs.
   bool contains(const IndexedBlockBitVector& rhs) const noexcept {
-    return contains_simd(rhs);
+    return delegate_method(contains, rhs);
   }
 
   /// Returns true if `this` contains some bits of rhs.
   bool intersects(const IndexedBlockBitVector& rhs) const noexcept {
-    return intersects_simd(rhs);
+    return delegate_method(intersects, rhs);
   }
 
   bool operator==(const IndexedBlockBitVector& rhs) const noexcept {
@@ -1290,11 +1377,7 @@ public:
   /// Inplace union with rhs.
   /// Returns true if `this` changed.
   bool operator|=(const IndexedBlockBitVector& rhs) noexcept {
-#if IBBV_FORCE_SCALAR
-    return union_scalar(rhs);
-#else
-    return union_simd(rhs);
-#endif
+    return delegate_method(union, rhs);
   }
 
   IndexedBlockBitVector operator|(const IndexedBlockBitVector& rhs) const {
@@ -1306,7 +1389,7 @@ public:
   /// Inplace intersection with rhs.
   /// Returns true if `this` changed.
   bool operator&=(const IndexedBlockBitVector& rhs) noexcept {
-    return intersect_simd(rhs);
+    return delegate_method(intersect, rhs);
   }
 
   IndexedBlockBitVector operator&(const IndexedBlockBitVector& rhs) const {
@@ -1318,11 +1401,7 @@ public:
   /// Inplace difference with rhs.
   /// Returns true if `this` changed.
   bool operator-=(const IndexedBlockBitVector& rhs) noexcept {
-#if IBBV_FORCE_SCALAR
-    return diff_scalar(rhs);
-#else
-    return diff_simd(rhs);
-#endif
+    return delegate_method(diff, rhs);
   }
 
   bool intersectWithComplement(const IndexedBlockBitVector& rhs) noexcept {

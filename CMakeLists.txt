@@ -30,10 +30,12 @@ if(IBBV_DEBUG_INFO)
 endif()
 
 option(IBBV_FORCE_SCALAR "Force scalar implementation" OFF)
-target_compile_options(ibbv PUBLIC -march=native)
 if(IBBV_FORCE_SCALAR)
   message(STATUS "Enabling force scalar implementation")
   add_compile_definitions(IBBV_FORCE_SCALAR=1)
+  target_compile_options(ibbv PUBLIC -march=x86-64 -mlzcnt -mpopcnt -mbmi)
+else()
+  target_compile_options(ibbv PUBLIC -march=native)
 endif()
 
 set(IBBV_IMPL "ibbv" CACHE STRING "Set the implementation of the bit vector.")

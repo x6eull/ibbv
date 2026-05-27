@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <immintrin.h>
@@ -19,24 +20,27 @@ _inline static uint16_t ror16(const uint16_t x, const int n) {
   return (x >> n) | (x << (16 - n));
 }
 
+#ifdef __BMI2__
 /// Duplicate bits in 16-bit integer to 32-bit integer.
 /// 0bxyz -> 0bxxyyzz
 _inline uint32_t duplicate_bits(uint16_t from) {
-  static_assert(__BMI2__, "BMI2 is required for this operation");
+  // static_assert(__BMI2__, "BMI2 is required for this operation");
   const auto even_dep = _pdep_u32(from, 0xAAAAAAAA);
   const auto odd_dep = _pdep_u32(from, 0x55555555);
   return odd_dep | even_dep;
 }
+#endif
 
+#ifdef __AVX512F__
 /// _mm512_2intersect_epi64 with emuated support.
 /// Elements out of bounds are treated as maximum 64-bit integers.
 /// "ne" means native or emulated. Requires AVX512F.
 _inline void ne_mm512_2intersect_epi32(const __m512i& a, const __m512i& b,
                                        __mmask16& k1, __mmask16& k2) {
-#if __AVX512VP2INTERSECT__
+#  if __AVX512VP2INTERSECT__
   _mm512_2intersect_epi32(a, b, &k1, &k2);
-#else // From https://arxiv.org/abs/2112.06342
-  static_assert(__AVX512F__, "AVX512F is required for this operation");
+#  else // From https://arxiv.org/abs/2112.06342
+  // static_assert(__AVX512F__, "AVX512F is required for this operation");
   __m512i a1 = _mm512_alignr_epi32(a, a, 4);
   __m512i a2 = _mm512_alignr_epi32(a, a, 8);
   __m512i a3 = _mm512_alignr_epi32(a, a, 12);
@@ -73,12 +77,44 @@ _inline void ne_mm512_2intersect_epi32(const __m512i& a, const __m512i& b,
   k2 = m_0 | ((0x7777 & m_1) << 1) | ((m_1 >> 3) & 0x1111) |
        ((0x3333 & m_2) << 2) | ((m_2 >> 2) & 0x3333) | ((m_3 >> 1) & 0x7777) |
        ((m_3 & 0x1111) << 3);
-#endif
+#  endif
 }
+#endif
 
 template <unsigned short BitWidth> struct avx_vec {
   // static_assert(false, "Unsupported bit width");
 };
+
+#ifdef IBBV_FORCE_SCALAR
+template <> struct avx_vec<128> {
+  using data_t = std::array<uint64_t, 2>;
+  static _inline auto load(const void* addr) {
+    return *reinterpret_cast<const data_t*>(addr);
+  }
+  static _inline void store(void* addr, const data_t& v) {
+    reinterpret_cast<uint64_t*>(addr)[0] = v[0];
+    reinterpret_cast<uint64_t*>(addr)[1] = v[1];
+  }
+  static _inline bool is_zero(const data_t& v) {
+    return v[0] == 0 && v[1] == 0;
+  }
+  static _inline auto or_op(const data_t& a, const data_t& b) {
+    return data_t{a[0] | b[0], a[1] | b[1]};
+  }
+  static _inline auto and_op(const data_t& a, const data_t& b) {
+    return data_t{a[0] & b[0], a[1] & b[1]};
+  }
+  static _inline auto andnot_op(const data_t& a, const data_t& b) {
+    return data_t{a[0] & ~b[0], a[1] & ~b[1]};
+  }
+  // static _inline uint64_t reduce_add(const data_t& v) {
+  //   return _mm_extract_epi64(v, 0) + _mm_extract_epi64(v, 1);
+  // }
+  static _inline bool eq_cmp(const data_t& a, const data_t& b) {
+    return a[0] == b[0] && a[1] == b[1];
+  }
+};
+#else
 template <> struct avx_vec<512> {
   using data_t = __m512i;
   static _inline auto load(const void* addr) {
@@ -178,14 +214,22 @@ template <> struct avx_vec<128> {
     return _mm_cmpeq_epi64_mask(a, b) == 0x3;
   }
 };
+#endif
 
 /// Returns true if all bits are zero.
 template <unsigned short BitWidth> _inline bool testz(const void* addr) {
+#ifdef IBBV_FORCE_SCALAR
+  static_assert(BitWidth == 128);
+  const uint64_t* block_ptr = reinterpret_cast<const uint64_t*>(addr);
+  return *block_ptr == 0 && *(block_ptr + 1) == 0;
+#else
   const auto v = avx_vec<BitWidth>::load(addr);
   return avx_vec<BitWidth>::is_zero(v);
+#endif
 }
 
 #define UNSUPPORTED_TYPE STATIC_ASSERT_FAIL("Unsupported type");
+
 // the following functions return `int` as well as header <bit>
 // TODO: use bit manipulation functions from std (C++20)
 template <typename T> _inline int popcnt(T value) {
